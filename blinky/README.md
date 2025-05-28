@@ -32,6 +32,18 @@ There should be only a single entry left inside the list which is GW1NR-LV9QN88P
 The summary is:
 
 ```
+Project
+    Name: blinky
+    Directory: C:\Users\lapto\dev\fpga\gowin_tang_nano
+    Source Directory: C:\Users\lapto\dev\fpga\gowin_tang_nano\blinky\src
+    Implementation Directory: C:\Users\lapto\dev\fpga\gowin_tang_nano\blinky\impl
+
+Device
+    Part Number: GW1NR-LV9QN88PC6/I5
+    Series: GW1NR
+    Device: GW1NR-9C
+    Package: QFN88P
+    Speed: C6/I5
 ```
 
 Create the a new verilog file:
@@ -122,7 +134,7 @@ led[3]		| output		| 14			| LVCMOS18
 led[4]		| output		| 15			| LVCMOS18
 led[5]		| output		| 16			| LVCMOS18
 sys_clk     | input			| 52			| LVCMOS33 <------- sys_clk has to be input and LVCMOS33
-sys_rst_n   | input			| 4				| LVCMOS18 <------- sys_rst_n has to be input
+sys_rst_n   | input			| 4             | LVCMOS18 <------- sys_rst_n has to be input
 ```
 
 Save the file and close the FloorPlanner.
