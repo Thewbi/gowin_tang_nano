@@ -328,8 +328,7 @@ See: https://wiki.sipeed.com/hardware/en/tang/Tang-Nano-9K/examples/led.html
 | sys_clk   | input			| 52			| LVCMOS33 | 
 | sys_rst_n | input			| 4             | LVCMOS18 |
 
-sys_clk has to be input and LVCMOS33
-sys_rst_n has to be input
+sys_clk has to be input and LVCMOS33. sys_rst_n has to be input. The UART pins are both LVCMOS33.
 
 
 Save the file and close the FloorPlanner.
