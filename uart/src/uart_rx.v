@@ -13,8 +13,8 @@ module uart_rx
 );
 
 // calculates the clock cycle for baud rate 
-// CYCLE contains the clock ticks for which a single character appears on the rx line
-// CYCLE ::= clock ticks per character
+// CYCLE contains the clock ticks for which a single bit of a character appears on the rx line
+// CYCLE ::= clock ticks per bit
 localparam                       CYCLE = CLK_FRE * 1000000 / BAUD_RATE;
 
 // state machine code
@@ -68,13 +68,13 @@ begin
 				next_state <= S_IDLE;
 
 		S_START:
-			if (cycle_cnt == CYCLE - 1) // one data cycle 
+			if (cycle_cnt == CYCLE - 1) // one data cycle (one bit) 
 				next_state <= S_REC_BYTE;
 			else
 				next_state <= S_START;
 
 		S_REC_BYTE:
-			if (cycle_cnt == CYCLE - 1  && bit_cnt == 3'd7) // receive 8bit data
+			if (cycle_cnt == CYCLE - 1 && bit_cnt == 3'd7) // receive 8 bit data
 				next_state <= S_STOP;
 			else
 				next_state <= S_REC_BYTE;
@@ -136,7 +136,7 @@ begin
 	if (rst_n == 1'b0)
 		cycle_cnt <= 16'd0;
 	else if ((state == S_REC_BYTE && cycle_cnt == CYCLE - 1) || next_state != state)
-        // CYCLE ::= clock ticks per character
+        // CYCLE ::= clock ticks per bit in a character
 		cycle_cnt <= 16'd0;
 	else
         // increment
