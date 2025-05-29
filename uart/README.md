@@ -314,23 +314,23 @@ You need to enter the following information:
 
 See: https://wiki.sipeed.com/hardware/en/tang/Tang-Nano-9K/examples/led.html
 
-```
-Port		| Direction		| Location 		| I/O Type
--------------------------------------------------------------
 
-led[0]		| output		| 10			| LVCMOS18
-led[1]		| output		| 11			| LVCMOS18
-led[2]		| output		| 13			| LVCMOS18
-led[3]		| output		| 14			| LVCMOS18
-led[4]		| output		| 15			| LVCMOS18
-led[5]		| output		| 16			| LVCMOS18
+| Port		| Direction		| Location 		| I/O Type |
+| --------- | ------------- | ------------- | -------- |
+| led[0]    | output		| 10			| LVCMOS18 |
+| led[1]	| output		| 11			| LVCMOS18 |
+| led[2]	| output		| 13			| LVCMOS18 |
+| led[3]	| output		| 14			| LVCMOS18 |
+| led[4]	| output		| 15			| LVCMOS18 |
+| led[5]	| output		| 16			| LVCMOS18 |
+| uart_tx   | output        | 17			| LVCMOS33 |
+| uart_rx   | input        	| 18			| LVCMOS33 |
+| sys_clk   | input			| 52			| LVCMOS33 | 
+| sys_rst_n | input			| 4             | LVCMOS18 |
 
-uart_tx     | output        | 17			| LVCMOS33
-uart_rx     | input        	| 18			| LVCMOS33
+sys_clk has to be input and LVCMOS33
+sys_rst_n has to be input
 
-sys_clk     | input			| 52			| LVCMOS33 <------- sys_clk has to be input and LVCMOS33
-sys_rst_n   | input			| 4             | LVCMOS18 <------- sys_rst_n has to be input
-```
 
 Save the file and close the FloorPlanner.
 
