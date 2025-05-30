@@ -5,11 +5,12 @@ module uart_rx
 )
 (
 	input                        clk,              // clock input
-	input                        rst_n,            // asynchronous reset input, low active 
-	output reg[7:0]              rx_data,          // received serial data
-	output reg                   rx_data_valid,    // received serial data is valid
+	input                        rst_n,            // asynchronous reset input, low active 	
 	input                        rx_data_ready,    // data receiver module ready
-	input                        rx_pin            // serial data input
+	input                        rx_pin,           // serial data input
+
+    output reg[7:0]              rx_data,          // received serial data
+	output reg                   rx_data_valid     // received serial data is valid
 );
 
 // calculates the clock cycle for baud rate 

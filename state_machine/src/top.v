@@ -39,26 +39,27 @@ localparam                       WAIT = 2; // wait 1 second and send uart receiv
 reg[7:0]                         tx_data;
 reg[7:0]                         tx_str;
 reg                              tx_data_valid;
-wire                             tx_data_ready;
+wire                             tx_data_ready; // output of the tx module. Asserted when transmission has been performed
 reg[7:0]                         tx_cnt;
 wire[7:0]                        rx_data;
 wire                             rx_data_valid;
 wire                             rx_data_ready;
-reg[31:0]                        wait_cnt;
 reg[3:0]                         state;
 
 // receiving data is always enabled
 assign rx_data_ready = 1'b1;
 
+reg latch_printf;
+
 always@(posedge sys_clk or negedge sys_rst_n)
 begin
 	if (sys_rst_n == 1'b0)
 	begin
-		wait_cnt <= 32'd0;
 		tx_data <= 8'd0;
 		state <= IDLE;
 		tx_cnt <= 8'd0;
 		tx_data_valid <= 1'b0;
+        latch_printf <= 1'b0;
 	end
 	else
     begin
@@ -71,42 +72,71 @@ begin
 
             SEND:
             begin
-                wait_cnt <= 32'd0;
-                tx_data <= tx_str;
+                tx_data = tx_str;
 
-                if (tx_data_valid == 1'b1 && tx_data_ready == 1'b1 && tx_cnt < DATA_NUM - 1) // send 12 bytes data
+                // this was inserted so that even if printf goes back to 0
+                // immediately, the UART TX control logic still performs 
+                // printf
+                if (printf == 1'b1)
                 begin
-                    tx_cnt <= tx_cnt + 8'd1; // increment send data counter
+                    latch_printf = 1'b1;
                 end
-                else if (tx_data_valid == 1'b1 && tx_data_ready == 1'b1) // last byte sent is complete
+
+                // plan the next transmission or get stuck in this branch
+                // make the buffer valid again
+                if (~tx_data_valid && latch_printf == 1'b1)
                 begin
-                    tx_cnt <= 8'd0;
-                    tx_data_valid <= 1'b0;
-                    state <= WAIT;
+                    tx_data_valid = 1'b1;
                 end
-                else if (~tx_data_valid)
+                else
+
+                // send 12 bytes data
+                // tx_data_valid - valid data is provided by the sender
+                // tx_data_ready - the tx module is done sending and has free resources to send more
+                // tx_cnt < DATA_NUM - 1 - characters from text still left to send
+                if (tx_data_valid == 1'b1 && tx_data_ready == 1'b1 && tx_cnt < DATA_NUM - 1) 
                 begin
-                    tx_data_valid <= 1'b1;
+                    // increment send data counter
+                    tx_cnt = tx_cnt + 8'd1; 
+                end
+
+                // last byte sent is complete
+                // tx_data_valid - valid data is provided by the sender
+                // tx_data_ready - the tx module is done sending and has free resources to send more
+                else if (tx_data_valid == 1'b1 && tx_data_ready == 1'b1) 
+                begin
+                    tx_cnt = 8'd0;
+                    tx_data_valid = 1'b0;
+                    state = WAIT;
                 end
             end
 
             WAIT:
             begin
-                // increment the wait counter
-                wait_cnt <= wait_cnt + 32'd1;
-
+                // respond to incoming data
                 if (rx_data_valid == 1'b1)
                 begin
                     tx_data_valid <= 1'b1; // tell the tx uart that data is ready for transmission
                     tx_data <= rx_data; // send received data
                 end
+
+                // handle end of transmission of a single character
+                // WAIT is only entered, when the string is completely sent as
+                // determined inside the SEND state. This is the reason why
+                // tx_data_valid is set to 0 here!
                 else if (tx_data_valid && tx_data_ready)
                 begin
-                    tx_data_valid <= 1'b0; // if the tx uart signals that the character has been sent, turn of tx_data_valid
+                    // if the tx uart signals that the character has been sent, 
+                    // turn of tx_data_valid to signal that the transmission buffer
+                    // contains stale data
+                    tx_data_valid <= 1'b0;
+                    latch_printf <= 1'b0;
+                    state <= SEND;
                 end
-                else if (wait_cnt >= CLK_FRE * 1000_000) // wait for 1 second
+                else
                 begin
-                    state <= SEND; // if the waiting period is over, transition back to SEND
+                    latch_printf <= 1'b0;
+                    state <= SEND;
                 end
             end
 
@@ -120,7 +150,7 @@ begin
 end
 
 //
-// combinational logic
+// combinational logic for UART
 //
 
 // `define example_1
@@ -132,16 +162,17 @@ end
 parameter 	ENG_NUM  = 14; // 非中文字符数
 parameter 	CHE_NUM  = 2 + 1; //  中文字符数
 parameter 	DATA_NUM = CHE_NUM * 3 + ENG_NUM; // 中文字符使用UTF8，占用3个字节
-wire [ DATA_NUM * 8 - 1:0] send_data = { "你好 Tang Nano 20K", 16'h0d0a };
+reg [DATA_NUM * 8 - 1:0] send_data = { "你好 Tang Nano 20K", 16'h0d0a };
 
 `else
 
-// Example 2
+// Example 2 - 20 englisch and 0 chinese characters in the string
 
 parameter 	ENG_NUM  = 19 + 1; // 非中文字符数
 parameter 	CHE_NUM  = 0; // 中文字符数
 parameter 	DATA_NUM = CHE_NUM * 3 + ENG_NUM + 1; // 中文字符使用UTF8，占用3个字节
-wire [ DATA_NUM * 8 - 1:0] send_data = { "Hello Tang Nano 20K", 16'h0d0a };
+
+reg [DATA_NUM * 8 - 1:0] send_data = { "Hello Tang Nano 20K", 16'h0d0a }; // append CR LF by concatenation
 
 `endif
 
@@ -154,12 +185,15 @@ uart_rx#
 	.BAUD_RATE(UART_FRE)
 ) uart_rx_inst
 (
+    // input
 	.clk                        (sys_clk),
-	.rst_n                      (sys_rst_n),
-	.rx_data                    (rx_data),
-	.rx_data_valid              (rx_data_valid),
+	.rst_n                      (sys_rst_n),	
 	.rx_data_ready              (rx_data_ready),
-	.rx_pin                     (uart_rx)
+	.rx_pin                     (uart_rx),
+
+    // output
+    .rx_data                    (rx_data),
+	.rx_data_valid              (rx_data_valid)
 );
 
 uart_tx#
@@ -168,10 +202,13 @@ uart_tx#
 	.BAUD_RATE(UART_FRE)
 ) uart_tx_inst
 (
+    // input
 	.clk                        (sys_clk),
 	.rst_n                      (sys_rst_n),
 	.tx_data                    (tx_data),
 	.tx_data_valid              (tx_data_valid),
+
+    // output
 	.tx_data_ready              (tx_data_ready),
 	.tx_pin                     (uart_tx)
 );
@@ -185,48 +222,16 @@ uart_tx#
 reg  r_Switch_1 = 1'b0;
 wire w_Switch_1;
 
-reg  r_LED_1    = 1'b0;
-reg  [5:0] r_led_reg    = 6'b111111;
+reg r_LED_1 = 1'b0;
+reg [5:0] r_led_reg = 6'b111111;
 
 // Instantiate Debounce Module
-Debounce_Switch Debounce_Inst
+Debounce_Switch debounce_Inst
 (
     .i_Clk(sys_clk), 
     .i_Switch(btn1_n),
     .o_Switch(w_Switch_1)
 );
-
-/*
-// Purpose: Toggle LED output when w_Switch_1 is released.
-always @(posedge sys_clk)
-begin
-    r_Switch_1 <= w_Switch_1; // Creates a Register
-//    // This conditional expression looks for a falling edge on w_Switch_1.
-//    // Here, the current value (i_Switch_1) is low, but the previous value
-//    // (r_Switch_1) is high.  This means that we found a falling edge.
-    if (w_Switch_1 == 1'b0 && r_Switch_1 == 1'b1)
-    begin
-      r_LED_1 <= ~r_LED_1; // Toggle LED output
-    end
-end
-
-assign led[0] = r_LED_1;
-*/
-
-/*
-always @(posedge sys_clk)
-begin
-    r_Switch_1 <= w_Switch_1;
-    if (w_Switch_1 == 1'b0 && r_Switch_1 == 1'b1)
-    begin
-      r_LED_1 <= ~r_LED_1; // Toggle LED output
-    end
-end
-
-assign led[0] = r_LED_1;
-*/
-
-//assign led[0] = r_LED_1;
 
 //
 // State Machine demo application
@@ -246,6 +251,9 @@ parameter STATE_0_IDLE = 3'b000,
 reg [2:0] cur_state = STATE_0_IDLE;
 reg [2:0] next_state;
 
+// DEBUG control the uart tx
+reg printf;
+
 // next state logic
 always @(posedge sys_clk) 
 begin
@@ -254,200 +262,144 @@ begin
     if (!sys_rst_n) 
     begin
         cur_state = STATE_0_IDLE;
-        //r_led_reg <= 6'b111111;
+        
     end
 
     // else transition to the next state
     else 
     begin
-        cur_state = next_state;    
-
-/*
-        case (cur_state)
-          
-            STATE_0_IDLE: 
-            begin
-                r_led_reg <= 6'b111111;
-            end
-
-            STATE_1:
-            begin
-                r_led_reg <= 6'b011111;
-            end
-
-            STATE_2: 
-            begin
-                r_led_reg <= 6'b111111;
-            end
-
-            default:
-            begin
-                r_led_reg <= 6'b111111;
-            end        
-
-        endcase
-*/
-
+        cur_state = next_state;
     end
   
 end
 
-//assign led = r_led_reg;
-
-/*
-always @(posedge sys_clk)
-begin
-    r_Switch_1 <= w_Switch_1;
-end
-*/
-
 // combinational always block for next state logic
-//always @(*) 
 always @(posedge sys_clk) 
 begin
 
+    // immediately silence the TX uart so it does not repeatedly send data
+    if (printf == 1'b1)
+    begin
+        printf = 1'b0;
+    end
+
+    // latch the switch state
     r_Switch_1 <= w_Switch_1;
+
     if (w_Switch_1 == 1'b0 && r_Switch_1 == 1'b1)
     begin
-      //r_led_reg <= ~r_led_reg; // Toggle LED output
 
         case (cur_state)
       
             STATE_0_IDLE: 
             begin
-                //r_led_reg <= ~r_led_reg;
+                // LED pattern
                 r_led_reg <= 6'b111111;
+
+                // write output over uart! printf("STATE_0_IDLE\n");
+                send_data = { "STATE_0_IDLE       ", 16'h0d0a };
+                printf = 1'b1;
+
+                // next state
                 next_state = STATE_1;
             end
 
             STATE_1:
             begin
-                //r_led_reg <= ~r_led_reg;
+                // LED pattern
                 r_led_reg <= 6'b011111;
+
+                // write ouptut over uart!
+                send_data = { "STATE_1            ", 16'h0d0a };
+                printf = 1'b1;
+
+                // next state
                 next_state = STATE_2;
             end
 
             STATE_2:  
             begin
-                //r_led_reg <= ~r_led_reg;
+                // LED pattern
                 r_led_reg <= 6'b101111;
+                
+                // write ouptut over uart!
+                send_data = { "STATE_2            ", 16'h0d0a };
+                printf = 1'b1;
+
+                // next state
                 next_state = STATE_3;
             end
 
             STATE_3:  
             begin
-                //r_led_reg <= ~r_led_reg;
+                // LED pattern
                 r_led_reg <= 6'b110111;
+
+                // write ouptut over uart!
+                send_data = { "STATE_3            ", 16'h0d0a };
+                printf = 1'b1;
+
+                // next state
                 next_state = STATE_4;
             end
 
             STATE_4:  
             begin
-                //r_led_reg <= ~r_led_reg;
+                // LED pattern
                 r_led_reg <= 6'b111011;
+
+                // write ouptut over uart!
+                send_data = { "STATE_4            ", 16'h0d0a };
+                printf = 1'b1;
+
+                // next state
                 next_state = STATE_5;
             end
 
             STATE_5:  
             begin
-                //r_led_reg <= ~r_led_reg;
+                // LED pattern
                 r_led_reg <= 6'b111101;
+                
+                // write ouptut over uart!
+                send_data = { "STATE_5            ", 16'h0d0a };
+                printf = 1'b1;
+
+                // next state
                 next_state = STATE_6;
             end
 
-            STATE_6:  
+            STATE_6:
             begin
-                //r_led_reg <= ~r_led_reg;
+                // LED pattern
                 r_led_reg <= 6'b111110;
+
+                // write ouptut over uart!
+                send_data = { "STATE_6            ", 16'h0d0a };
+                printf = 1'b1;
+
+                // next state
                 next_state = STATE_0_IDLE;
             end
                 
-            default:  
+            default:
             begin
-                //r_led_reg <= ~r_led_reg;
+                // LED pattern
                 r_led_reg <= 6'b111111;
+
+                // write ouptut over uart!
+                send_data = { "default            ", 16'h0d0a };
+                printf = 1'b1;
+
+                // next state
                 next_state = STATE_0_IDLE;
             end
             
         endcase
     end
-    
-/*
-    // default next state assignment
-    next_state = STATE_0_IDLE;
-
-    case (cur_state)
-      
-        STATE_0_IDLE: 
-        begin
-            // process input in STATE_0_IDLE state
-            if (w_Switch_1 == 1'b0 && r_Switch_1 == 1'b1)
-            begin
-                next_state = STATE_1; // transition to STATE_1 on input_signal
-            end
-            r_led_reg = 6'b011111;
-        end
-
-        STATE_1:
-        begin
-            if (w_Switch_1 == 1'b0 && r_Switch_1 == 1'b1)
-            begin
-                next_state = STATE_2;
-                
-            end
-            r_led_reg = 6'b101111;
-        end
-
-        STATE_2:  
-        begin
-            next_state = STATE_0_IDLE;
-            r_led_reg = 6'b111111;
-        end
-            
-        default:  
-        begin
-            next_state = STATE_0_IDLE;
-            r_led_reg = 6'b111111;
-        end
-        
-    endcase
-
-    r_Switch_1 <= w_Switch_1;
-*/
+  
 end
-
 
 assign led = r_led_reg;
-
-
-/*
-//
-// LED demo application
-//
-
-reg [23:0] counter;
-
-// update the counter variable
-always @(posedge sys_clk or negedge sys_rst_n) begin
-    if (!sys_rst_n)
-        counter <= 24'd0;
-    else if (counter < 24'd1349_9999)       // 0.5s delay
-        counter <= counter + 1'b1;
-    else
-        counter <= 24'd0;
-end
-
-
-// update the LEDs
-always @(posedge sys_clk or negedge sys_rst_n) begin
-    if (!sys_rst_n)
-        led <= 6'b111110;
-    else if (counter == 24'd1349_9999)       // 0.5s delay
-        //led[5:0] <= {led[4:0],led[5]};    // left to right
-        led[5:0] <= {led[0], led[5:1]};     // right to left
-    else
-        led <= led;
-end
-*/
 
 endmodule
