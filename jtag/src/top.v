@@ -23,7 +23,7 @@ module top(
     input jtag_clk,
     input jtag_tms,
 
-    output wire [5:0] led,   // 6 LEDS pin
+    output wire [5:0] led,  // 6 LEDS pin
 	output uart_tx          // UART TX
 );
 
@@ -275,8 +275,61 @@ begin
   
 end
 
+// the JTAG clock is slower than the FPGA clock therefore
+// the FPGA will sample the JTAG clock several times and
+// cause several actions. Therefore the FGPA sampling process
+// is artificially "slowed down" by a counter. 
+//
+// The counter is reset, whenever it scans a high JTAG clock.
+// Only when the counter runs out, the JTAG clock signal will cause
+// an action. The counter counts over the falling
+// edge of the JTAG clock and hence the FPGA cannot cause an action twice or more
+// for a single JTAG clock tick. 
+parameter c_TRANSITION_LIMIT = 250000; // 10 ms at 25 MHz
+reg transition;
+reg count_started;
+reg [24:0] transition_counter;
+always @(posedge sys_clk)
+begin
+
+    // the JTAG clock goes high and a TMS clock signal is detected
+    if (jtag_clk == 1'b1)
+    begin
+        // start counting
+        count_started = 1'b1; 
+
+        // do not transition the state machine
+        transition = 1'b0;
+        // reset the counter
+        transition_counter = 25'b0;
+    end
+
+    if (next_state == cur_state) 
+    begin
+        // do not transition any more once the transition has been completed
+        transition = 1'b0;
+    end
+
+    // while counting, increment the counter
+    if ((transition_counter < c_TRANSITION_LIMIT) & (count_started == 1'b1))
+    begin
+        transition_counter = transition_counter + 1'b1;
+    end
+
+    // when the timer has run out, reset counter and perform action
+    if ((transition_counter >= c_TRANSITION_LIMIT) & (count_started == 1'b1))
+    begin
+        // stop counting
+        count_started = 1'b0;
+
+        // this is the action, make the state machine transition into it's next state
+        transition = 1'b1;        
+    end
+
+end
+
 // combinational always block for next state logic
-always @(posedge sys_clk) 
+always @(posedge sys_clk)
 begin
 
     // immediately silence the TX uart so it does not repeatedly send data
@@ -288,7 +341,13 @@ begin
     // latch the switch state
     r_Switch_1 <= w_Switch_1;
 
-    if (w_Switch_1 == 1'b0 && r_Switch_1 == 1'b1)
+    //if (w_Switch_1 == 1'b0 && r_Switch_1 == 1'b1)
+
+    // Data on the TDI, TMS, and normal-function inputs
+    // is captured on the rising edge of TCK. Data appears 
+    // on the TDO and normal-function output terminals on the
+    // falling edge of TCK
+    if (transition == 1'b1)
     begin
 
         case (cur_state)
