@@ -209,8 +209,13 @@ begin
     end
 end
 
-assign led[0] = r_LED_1;
 
+assign led[0] = r_LED_1;
+assign led[1] = 1'b1;
+assign led[2] = 1'b1;
+assign led[3] = 1'b1;
+assign led[4] = 1'b1;
+assign led[5] = 1'b1;
 
 /*
 //

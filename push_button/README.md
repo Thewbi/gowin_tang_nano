@@ -10,87 +10,32 @@ https://wiki.sipeed.com/hardware/en/tang/Tang-Nano-9K/Nano-9K.html
 
 
 
-# state_machine Project
+# push_button Project
 
 ## Introduction / Strategy
 
 https://www.chipverify.com/verilog/verilog-fsm
 
-This project will provide a skeleton for a Moore state machine.
+This project will provide a Debouncer from NandLand (TM) connected to the user button pin.
+When the user presses the pin, it is debounced and the debounced signal is used to toggle
+a LED.
 
-* Moore State Machine - Output determined by current state (outputs are connected to the states)
-* Mealy State Machine - Output determined by current state and input (outputs are connected to the transitions between states)
+Debouncing means that the signal that the push buttons outputs, is affected by mechanical
+movements which rapidly opens and closes the switch when it is pressed until it finally
+settles and the button takes on the final signal at rest.
 
-For Moore StateMachines, you need 
+It is necessary to filter out the rapid bouncing of the switch and to return a single signal
+change only. This might be necessary in applications, where you want to count button presses
+for example. If the button is bouncing, clicking it might count several button closes at once!
+Another point is if you want to execute some reaction on a button press only once per press.
+It the button bounces, the action is executed several times per button press instead of once
+only.
 
-* next state logic - applies the next state and makes it the current state, every clock tick, sensitivity list contains the clock
-* input / output processing / output logic - receives a letter from the alphabet as input, performs output and set the next state into the next_state variable.
-* registers that hold the current state - have to have enough with to store all states
-* a list of states - states may be defined as parameters
-
-The constraint that the design has to deal with is the fact that a variable can only be modified by
-a single always block! This is why two variables are used: cur_state and next_state instead of just one state machine state variable.
-The next state logic modifies cur_state whereas the output logic modifies next_state.
-By changing next_state, a state transition request is issued. The requset is not executed by the next state logic immediately
-but only with the next clock tick. The next state logic copies next_state into cur_state and therefore executes the state transition.
-
-The "next state logic" is sequential (sensitivity list contains the clock)
-
-```
-always @(posedge clk) 
-begin
-
-  // if reset is asserted, go back to IDLE state
-  if (!resetn) 
-  begin
-    cur_state <= IDLE;
-  end
-
-  // else transition to the next state
-  else begin
-    cur_state <= next_state;
-  end
-  
-end
-```
-
-The "output logic" is triggered when the state changes.
-
-```
-// Combinational always block for next state logic
-always @(*) 
-begin
-    
-  // Default next state assignment
-  next_state = IDLE;
-
-  case (cur_state)
-  
-    IDLE: begin
-	  // process input in IDLE state
-      if (input_signal)
-	    next_state = STATE_1; // Transition to STATE_1 on input_signal
-	end
-
-    STATE_1: begin
-	  // process input in STATE_1 state
-      if (!input_signal)
-        next_state = STATE_2; // Transition to STATE_2 if input_signal is low
-    end
-
-    STATE_2:  
-	  next_state = IDLE; // Transition back to IDLE
-        
-	default:  
-	  next_state = IDLE; // Fallback to default state
-    
-  endcase
-  
-end
-```
-
-As input signals, this project will use a button press.
-As outputs, this project will light a different LED per state.
+The debouncing uses a counter which is reset whenever the signal toggles (cause by bouncing).
+This means that if the bouncing has settled, the timer is able to count up to high values.
+Once the counter reaches an upper cut-off threshold value, the debouncer returns a final value.
+Choosing the correct upper threshold value is the task of the application engineer. A value of
+10 ms is used by default. This default value works well on the Tang Nano.
 
 ## Push Button
 
