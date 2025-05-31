@@ -154,22 +154,32 @@ Debounce_Switch debounce_Inst
 );
 
 //
-// State Machine demo application
+// JTAG State Machine
 //
 
-// all state machine states
-parameter STATE_0_IDLE = 3'b000, 
-    STATE_1 = 3'b001,
-    STATE_2 = 3'b010, 
-    STATE_3 = 3'b011,
-    STATE_4 = 3'b100,
-    STATE_5 = 3'b101,
-    STATE_6 = 3'b110
-;
+// all 16 JTAG state machine states
+parameter TEST_LOGIC_RESET = 5'b00000;
+parameter RUN_TEST_IDLE = 5'b00001;
+// DR
+parameter SELECT_DR_SCAN = 5'b00010;
+parameter CAPTURE_DR = 5'b00011;
+parameter SHIFT_DR = 5'b00100;
+parameter EXIT1_DR = 5'b00101;
+parameter PAUSE_DR = 5'b00110;
+parameter EXIT2_DR = 5'b00111;
+parameter UPDATE_DR = 5'b01000;
+// IR
+parameter SELECT_IR_SCAN = 5'b01001;
+parameter CAPTURE_IR = 5'b01010;
+parameter SHIFT_IR = 5'b01011;
+parameter EXIT1_IR = 5'b01100;
+parameter PAUSE_IR = 5'b01101;
+parameter EXIT2_IR = 5'b01110;
+parameter UPDATE_IR = 5'b01111;
 
 // current and next_state
-reg [2:0] cur_state = STATE_0_IDLE;
-reg [2:0] next_state;
+reg [4:0] cur_state = TEST_LOGIC_RESET;
+reg [4:0] next_state;
 
 // next state logic
 always @(posedge sys_clk) 
@@ -178,7 +188,7 @@ begin
     // if reset is asserted, go back to IDLE state
     if (!sys_rst_n) 
     begin
-        cur_state = STATE_0_IDLE;        
+        cur_state = TEST_LOGIC_RESET;        
     end
 
     // else transition to the next state
@@ -201,8 +211,10 @@ end
 // for a single JTAG clock tick. 
 parameter c_TRANSITION_LIMIT = 250000; // 10 ms at 25 MHz
 reg transition;
+reg jtag_tms_storage;
 reg count_started;
 reg [24:0] transition_counter;
+
 always @(posedge sys_clk)
 begin
 
@@ -216,6 +228,8 @@ begin
         transition = 1'b0;
         // reset the counter
         transition_counter = 25'b0;
+
+        jtag_tms_storage = jtag_tms;
     end
 
     if (next_state == cur_state) 
@@ -237,7 +251,9 @@ begin
         count_started = 1'b0;
 
         // this is the action, make the state machine transition into it's next state
-        transition = 1'b1;        
+        transition = 1'b1;
+
+        
     end
 
 end
@@ -266,95 +282,243 @@ begin
 
         case (cur_state)
       
-            STATE_0_IDLE: 
+            TEST_LOGIC_RESET: 
             begin
                 // LED pattern
-                r_led_reg <= 6'b111111;
+                //r_led_reg <= 6'b111111;
 
-                // write output over uart! printf("STATE_0_IDLE\n");
-                send_data = { "STATE_0_IDLE       ", 16'h0d0a };
-                printf = 1'b1;
-
-                // next state
-                next_state = STATE_1;
+                if (jtag_tms_storage == 1'b0) 
+                begin
+                    send_data = { "RUN_TEST_IDLE      ", 16'h0d0a };
+                    next_state = RUN_TEST_IDLE;
+                end
+                else
+                begin
+                    send_data = { "TEST_LOGIC_RESET   ", 16'h0d0a };
+                end                
+                printf = 1'b1; // write ouptut over UART!                
             end
 
-            STATE_1:
+            RUN_TEST_IDLE:
             begin
-                // LED pattern
-                r_led_reg <= 6'b011111;
-
-                // write ouptut over uart!
-                send_data = { "STATE_1            ", 16'h0d0a };
-                printf = 1'b1;
-
-                // next state
-                next_state = STATE_2;
+                if (jtag_tms_storage == 1'b0) 
+                begin
+                    send_data = { "RUN_TEST_IDLE      ", 16'h0d0a };
+                end
+                else
+                begin
+                    send_data = { "SELECT_DR_SCAN     ", 16'h0d0a };
+                    next_state = SELECT_DR_SCAN;
+                end                
+                printf = 1'b1; // write ouptut over UART!
             end
 
-            STATE_2:  
+            SELECT_DR_SCAN:  
             begin
-                // LED pattern
-                r_led_reg <= 6'b101111;
-                
-                // write ouptut over uart!
-                send_data = { "STATE_2            ", 16'h0d0a };
-                printf = 1'b1;
-
-                // next state
-                next_state = STATE_3;
+                if (jtag_tms_storage == 1'b0) 
+                begin
+                    send_data = { "CAPTURE_DR         ", 16'h0d0a };
+                    next_state = CAPTURE_DR;
+                end
+                else
+                begin
+                    send_data = { "SELECT_IR_SCAN     ", 16'h0d0a };
+                    next_state = SELECT_IR_SCAN;
+                end                
+                printf = 1'b1; // write ouptut over UART!
             end
 
-            STATE_3:  
+            CAPTURE_DR:  
             begin
-                // LED pattern
-                r_led_reg <= 6'b110111;
-
-                // write ouptut over uart!
-                send_data = { "STATE_3            ", 16'h0d0a };
-                printf = 1'b1;
-
-                // next state
-                next_state = STATE_4;
+                if (jtag_tms_storage == 1'b0) 
+                begin
+                    send_data = { "SHIFT_DR           ", 16'h0d0a };
+                    next_state = SHIFT_DR;
+                end
+                else
+                begin
+                    send_data = { "EXIT1_DR           ", 16'h0d0a };
+                    next_state = EXIT1_DR;
+                end                
+                printf = 1'b1; // write ouptut over UART!
             end
 
-            STATE_4:  
+            SHIFT_DR:  
             begin
-                // LED pattern
-                r_led_reg <= 6'b111011;
-
-                // write ouptut over uart!
-                send_data = { "STATE_4            ", 16'h0d0a };
-                printf = 1'b1;
-
-                // next state
-                next_state = STATE_5;
+                if (jtag_tms_storage == 1'b0) 
+                begin
+                    send_data = { "SHIFT_DR           ", 16'h0d0a };
+                end
+                else
+                begin
+                    send_data = { "EXIT1_DR           ", 16'h0d0a };
+                    next_state = EXIT1_DR;
+                end                
+                printf = 1'b1; // write ouptut over UART!
             end
 
-            STATE_5:  
+            EXIT1_DR:  
             begin
-                // LED pattern
-                r_led_reg <= 6'b111101;
-                
-                // write ouptut over uart!
-                send_data = { "STATE_5            ", 16'h0d0a };
-                printf = 1'b1;
-
-                // next state
-                next_state = STATE_6;
+                if (jtag_tms_storage == 1'b0) 
+                begin
+                    send_data = { "PAUSE_DR           ", 16'h0d0a };
+                    next_state = PAUSE_DR;
+                end
+                else
+                begin
+                    send_data = { "UPDATE_DR          ", 16'h0d0a };
+                    next_state = UPDATE_DR;
+                end                
+                printf = 1'b1; // write ouptut over UART!
             end
 
-            STATE_6:
+            PAUSE_DR:
             begin
-                // LED pattern
-                r_led_reg <= 6'b111110;
+                if (jtag_tms_storage == 1'b0) 
+                begin
+                    send_data = { "PAUSE_DR           ", 16'h0d0a };
+                    next_state = PAUSE_DR;
+                end
+                else
+                begin
+                    send_data = { "EXIT2_DR           ", 16'h0d0a };
+                    next_state = EXIT2_DR;
+                end                
+                printf = 1'b1; // write ouptut over UART!
+            end
 
-                // write ouptut over uart!
-                send_data = { "STATE_6            ", 16'h0d0a };
-                printf = 1'b1;
+            EXIT2_DR:
+            begin
+                if (jtag_tms_storage == 1'b0) 
+                begin
+                    send_data = { "SHIFT_DR           ", 16'h0d0a };
+                    next_state = SHIFT_DR;
+                end
+                else
+                begin
+                    send_data = { "UPDATE_DR          ", 16'h0d0a };
+                    next_state = UPDATE_DR;
+                end                
+                printf = 1'b1; // write ouptut over UART!
+            end
 
-                // next state
-                next_state = STATE_0_IDLE;
+            UPDATE_DR:
+            begin
+                if (jtag_tms_storage == 1'b0) 
+                begin
+                    send_data = { "RUN_TEST_IDLE      ", 16'h0d0a };
+                    next_state = RUN_TEST_IDLE;
+                end
+                else
+                begin
+                    send_data = { "SELECT_DR_SCAN     ", 16'h0d0a };
+                    next_state = SELECT_DR_SCAN;
+                end                
+                printf = 1'b1; // write ouptut over UART!
+            end
+
+            SELECT_IR_SCAN:  
+            begin
+                if (jtag_tms_storage == 1'b0) 
+                begin
+                    send_data = { "CAPTURE_IR         ", 16'h0d0a };
+                    next_state = CAPTURE_IR;
+                end
+                else
+                begin
+                    send_data = { "TEST_LOGIC_RESET   ", 16'h0d0a };
+                    next_state = TEST_LOGIC_RESET;
+                end                
+                printf = 1'b1; // write ouptut over UART!
+            end
+
+            CAPTURE_IR:  
+            begin
+                if (jtag_tms_storage == 1'b0) 
+                begin
+                    send_data = { "SHIFT_IR           ", 16'h0d0a };
+                    next_state = SHIFT_IR;
+                end
+                else
+                begin
+                    send_data = { "EXIT1_IR           ", 16'h0d0a };
+                    next_state = EXIT1_IR;
+                end                
+                printf = 1'b1; // write ouptut over UART!
+            end
+
+            SHIFT_IR:  
+            begin
+                if (jtag_tms_storage == 1'b0) 
+                begin
+                    send_data = { "SHIFT_IR           ", 16'h0d0a };
+                end
+                else
+                begin
+                    send_data = { "EXIT1_IR           ", 16'h0d0a };
+                    next_state = EXIT1_IR;
+                end                
+                printf = 1'b1; // write ouptut over UART!
+            end
+
+            EXIT1_IR:  
+            begin
+                if (jtag_tms_storage == 1'b0) 
+                begin
+                    send_data = { "PAUSE_IR           ", 16'h0d0a };
+                    next_state = PAUSE_IR;
+                end
+                else
+                begin
+                    send_data = { "UPDATE_IR          ", 16'h0d0a };
+                    next_state = UPDATE_IR;
+                end                
+                printf = 1'b1; // write ouptut over UART!
+            end
+
+            PAUSE_IR:
+            begin
+                if (jtag_tms_storage == 1'b0) 
+                begin
+                    send_data = { "PAUSE_IR           ", 16'h0d0a };
+                    next_state = PAUSE_IR;
+                end
+                else
+                begin
+                    send_data = { "EXIT2_IR           ", 16'h0d0a };
+                    next_state = EXIT2_IR;
+                end                
+                printf = 1'b1; // write ouptut over UART!
+            end
+
+            EXIT2_IR:
+            begin
+                if (jtag_tms_storage == 1'b0) 
+                begin
+                    send_data = { "SHIFT_IR           ", 16'h0d0a };
+                    next_state = SHIFT_IR;
+                end
+                else
+                begin
+                    send_data = { "UPDATE_IR          ", 16'h0d0a };
+                    next_state = UPDATE_IR;
+                end                
+                printf = 1'b1; // write ouptut over UART!
+            end
+
+            UPDATE_IR:
+            begin
+                if (jtag_tms_storage == 1'b0) 
+                begin
+                    send_data = { "RUN_TEST_IDLE      ", 16'h0d0a };
+                    next_state = RUN_TEST_IDLE;
+                end
+                else
+                begin
+                    send_data = { "SELECT_DR_SCAN     ", 16'h0d0a };
+                    next_state = SELECT_DR_SCAN;
+                end                
+                printf = 1'b1; // write ouptut over UART!
             end
                 
             default:
@@ -362,12 +526,12 @@ begin
                 // LED pattern
                 r_led_reg <= 6'b111111;
 
-                // write ouptut over uart!
-                send_data = { "default            ", 16'h0d0a };
+                // write ouptut over UART!
+                send_data = { "TEST_LOGIC_RESET       ", 16'h0d0a };
                 printf = 1'b1;
 
                 // next state
-                next_state = STATE_0_IDLE;
+                next_state = TEST_LOGIC_RESET;
             end
             
         endcase
