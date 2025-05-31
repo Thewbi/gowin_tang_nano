@@ -15,142 +15,24 @@
 // 
 
 module top(
+
+    // input
     input sys_clk,          // clk input
     input sys_rst_n,        // reset input button  (active low)
 	input uart_rx,          // UART RX
     input btn1_n,           // push button 1 (active low)
-
     input jtag_clk,
     input jtag_tms,
 
+    // output
     output wire [5:0] led,  // 6 LEDS pin
 	output uart_tx          // UART TX
+
 );
 
 //
 // UART demo application
 //
-
-parameter                        CLK_FRE  = 27; // Mhz. The Tang Nano 9K has a 27 Mhz clock source on board
-parameter                        UART_FRE = 115200; // baudrate
-
-// the state machine that runs the demo application has three states IDLE, SEND and WAIT
-localparam                       IDLE = 0;
-localparam                       SEND = 1; // send 
-localparam                       WAIT = 2; // wait 1 second and send uart received data
-
-reg[7:0]                         tx_data;
-reg[7:0]                         tx_str;
-reg                              tx_data_valid;
-wire                             tx_data_ready; // output of the tx module. Asserted when transmission has been performed
-reg[7:0]                         tx_cnt;
-wire[7:0]                        rx_data;
-wire                             rx_data_valid;
-wire                             rx_data_ready;
-reg[3:0]                         state;
-
-// receiving data is always enabled
-assign rx_data_ready = 1'b1;
-
-reg latch_printf;
-
-always@(posedge sys_clk or negedge sys_rst_n)
-begin
-	if (sys_rst_n == 1'b0)
-	begin
-		tx_data <= 8'd0;
-		state <= IDLE;
-		tx_cnt <= 8'd0;
-		tx_data_valid <= 1'b0;
-        latch_printf <= 1'b0;
-	end
-	else
-    begin
-        case(state)
-
-            IDLE:
-            begin
-                state <= SEND;
-            end
-
-            SEND:
-            begin
-                tx_data = tx_str;
-
-                // this was inserted so that even if printf goes back to 0
-                // immediately, the UART TX control logic still performs 
-                // printf
-                if (printf == 1'b1)
-                begin
-                    latch_printf = 1'b1;
-                end
-
-                // plan the next transmission or get stuck in this branch
-                // make the buffer valid again
-                if (~tx_data_valid && latch_printf == 1'b1)
-                begin
-                    tx_data_valid = 1'b1;
-                end
-                else
-
-                // send 12 bytes data
-                // tx_data_valid - valid data is provided by the sender
-                // tx_data_ready - the tx module is done sending and has free resources to send more
-                // tx_cnt < DATA_NUM - 1 - characters from text still left to send
-                if (tx_data_valid == 1'b1 && tx_data_ready == 1'b1 && tx_cnt < DATA_NUM - 1) 
-                begin
-                    // increment send data counter
-                    tx_cnt = tx_cnt + 8'd1; 
-                end
-
-                // last byte sent is complete
-                // tx_data_valid - valid data is provided by the sender
-                // tx_data_ready - the tx module is done sending and has free resources to send more
-                else if (tx_data_valid == 1'b1 && tx_data_ready == 1'b1) 
-                begin
-                    tx_cnt = 8'd0;
-                    tx_data_valid = 1'b0;
-                    state = WAIT;
-                end
-            end
-
-            WAIT:
-            begin
-                // respond to incoming data
-                if (rx_data_valid == 1'b1)
-                begin
-                    tx_data_valid <= 1'b1; // tell the tx uart that data is ready for transmission
-                    tx_data <= rx_data; // send received data
-                end
-
-                // handle end of transmission of a single character
-                // WAIT is only entered, when the string is completely sent as
-                // determined inside the SEND state. This is the reason why
-                // tx_data_valid is set to 0 here!
-                else if (tx_data_valid && tx_data_ready)
-                begin
-                    // if the tx uart signals that the character has been sent, 
-                    // turn of tx_data_valid to signal that the transmission buffer
-                    // contains stale data
-                    tx_data_valid <= 1'b0;
-                    latch_printf <= 1'b0;
-                    state <= SEND;
-                end
-                else
-                begin
-                    latch_printf <= 1'b0;
-                    state <= SEND;
-                end
-            end
-
-            default:
-            begin
-                state <= IDLE;
-            end
-
-        endcase
-    end
-end
 
 //
 // combinational logic for UART
@@ -179,15 +61,51 @@ reg [DATA_NUM * 8 - 1:0] send_data = { "Hello Tang Nano 20K", 16'h0d0a }; // app
 
 `endif
 
+reg[7:0]                        tx_str;
+
+wire[7:0]                       tx_data;
+wire[7:0]                       tx_cnt;
+
+// DEBUG control the uart tx
+reg printf;
+
+wire                            tx_data_ready; // output of the tx module. Asserted when transmission has been performed
+wire[7:0]                       rx_data;
+reg                             rx_data_ready = 1'b1; // receiving data is always enabled
+wire                            tx_data_valid;
+
+uart_controller 
+#(
+    .DATA_NUM(DATA_NUM)
+) uart_controller_inst (
+
+    // input
+	.clk                        (sys_clk),
+	.rst_n                      (sys_rst_n),
+    .tx_str                     (tx_str),
+    .printf                     (printf),
+    .tx_data_ready (tx_data_ready),
+    .o_tx_data_valid (tx_data_valid),
+    .rx_data(rx_data),
+    .rx_data_valid(rx_data_valid),
+
+    // output
+    .o_tx_cnt                     (tx_cnt),
+	.o_tx_data                    (tx_data)
+    
+);
+
+parameter                        CLK_FRE  = 27; // Mhz. The Tang Nano 9K has a 27 Mhz clock source on board
+parameter                        UART_FRE = 115200; // baudrate
+
 always@(*)
 	tx_str <= send_data[(DATA_NUM - 1 - tx_cnt) * 8 +: 8];
 
-uart_rx#
-(
+uart_rx
+#(
 	.CLK_FRE(CLK_FRE),
 	.BAUD_RATE(UART_FRE)
-) uart_rx_inst
-(
+) uart_rx_inst (
     // input
 	.clk                        (sys_clk),
 	.rst_n                      (sys_rst_n),	
@@ -199,12 +117,11 @@ uart_rx#
 	.rx_data_valid              (rx_data_valid)
 );
 
-uart_tx#
-(
+uart_tx
+#(
 	.CLK_FRE(CLK_FRE),
 	.BAUD_RATE(UART_FRE)
-) uart_tx_inst
-(
+) uart_tx_inst (
     // input
 	.clk                        (sys_clk),
 	.rst_n                      (sys_rst_n),
@@ -253,9 +170,6 @@ parameter STATE_0_IDLE = 3'b000,
 // current and next_state
 reg [2:0] cur_state = STATE_0_IDLE;
 reg [2:0] next_state;
-
-// DEBUG control the uart tx
-reg printf;
 
 // next state logic
 always @(posedge sys_clk) 

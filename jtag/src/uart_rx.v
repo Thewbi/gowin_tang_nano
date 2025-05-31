@@ -5,8 +5,8 @@ module uart_rx
 )
 (
 	input                        clk,              // clock input
-	input                        rst_n,            // asynchronous reset input, low active 	
-	input                        rx_data_ready,    // data receiver module ready
+	input                        rst_n,            // asynchronous reset input, low active
+	input                        rx_data_ready,    // data receiver module enabled
 	input                        rx_pin,           // serial data input
 
     output reg[7:0]              rx_data,          // received serial data
