@@ -32,7 +32,8 @@ reg[3:0]                         state;
 assign o_tx_cnt = tx_cnt;
 assign o_tx_data = tx_data;
 
-reg latch_printf;
+//reg latch_printf;
+reg internal_printf;
 
 always@(posedge clk or negedge rst_n)
 begin
@@ -42,7 +43,8 @@ begin
 		state <= IDLE;
 		tx_cnt <= 8'd0;
 		o_tx_data_valid <= 1'b0;
-        latch_printf <= 1'b0;
+        //latch_printf <= 1'b0;
+        internal_printf <= 1'b0;
 	end
 	else
     begin
@@ -60,15 +62,16 @@ begin
                 // this was inserted so that even if printf goes back to 0
                 // immediately, the UART TX control logic still performs 
                 // printf
-                if (printf == 1'b1)
-                begin
-                    latch_printf = 1'b1;
-                end
+                //if (printf == 1'b1)
+                //begin
+                //    latch_printf = 1'b1;
+                //end
 
                 // plan the next transmission or get stuck in this branch
                 // make the buffer valid again
-                if (~o_tx_data_valid && latch_printf == 1'b1)
+                if (~o_tx_data_valid && internal_printf != printf)
                 begin
+                    internal_printf = printf;
                     o_tx_data_valid = 1'b1;
                 end
                 else
@@ -113,12 +116,12 @@ begin
                     // turn of o_tx_data_valid to signal that the transmission buffer
                     // contains stale data
                     o_tx_data_valid <= 1'b0;
-                    latch_printf <= 1'b0;
+                    //latch_printf <= 1'b0;
                     state <= SEND;
                 end
                 else
                 begin
-                    latch_printf <= 1'b0;
+                    //latch_printf <= 1'b0;
                     state <= SEND;
                 end
             end

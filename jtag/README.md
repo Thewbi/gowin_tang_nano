@@ -66,13 +66,19 @@ IO_LOC "jtag_clk" 25;
 IO_PORT "jtag_clk" IO_TYPE=LVCMOS33 PULL_MODE=UP BANK_VCCIO=3.3;
 IO_LOC "jtag_tms" 26;
 IO_PORT "jtag_tms" IO_TYPE=LVCMOS33 PULL_MODE=UP BANK_VCCIO=3.3;
+IO_LOC "jtag_tdi" 27;
+IO_PORT "jtag_tdi" IO_TYPE=LVCMOS33 PULL_MODE=UP BANK_VCCIO=3.3;
+IO_LOC "jtag_tdo" 28;
+IO_PORT "jtag_tdo" IO_TYPE=LVCMOS33 PULL_MODE=UP BANK_VCCIO=3.3;
 ```
 
-Here are the settings.
+Here are the constraint settings.
 
 | Port		| Direction		| Location 		| I/O Type |
 | --------- | ------------- | ------------- | -------- |
 | jtag_clk  | intput		| 25			| LVCMOS33 |
+| jtag_tdi  | input         | 27            | LVCMOS33 |
+| jtag_tdo  | output        | 28            | LVCMOS33 |
 | jtag_tms	| intput		| 26			| LVCMOS33 |
 
 The product page of the FT232H is: https://ftdichip.com/products/ft232hq/
@@ -80,13 +86,17 @@ The datasheet is: https://ftdichip.com/wp-content/uploads/2024/09/DS_FT232H.pdf
 
 The application note for JTAG is: 
 
-Here is how to connec the FT232H board (https://www.amazon.de/FT232H-Hochgeschwindigkeits-Multifunktionsmodul-I2C-Modul-Debuggen-Programmieren/dp/B0811WTD4N/ref=asc_df_B0811WTD4N?mcid=d451df40f0a3368fb16aecaf08685201&th=1&psc=1&hvocijid=5223380134859239549-B0811WTD4N-&hvexpln=75&tag=googshopde-21&linkCode=df0&hvadid=696184104678&hvpos=&hvnetw=g&hvrand=5223380134859239549&hvpone=&hvptwo=&hvqmt=&hvdev=c&hvdvcmdl=&hvlocint=&hvlocphy=9042225&hvtargid=pla-2281435176138&psc=1&gad_source=1) 
+Here is how to connect the FT232H board (https://www.amazon.de/FT232H-Hochgeschwindigkeits-Multifunktionsmodul-I2C-Modul-Debuggen-Programmieren/dp/B0811WTD4N/ref=asc_df_B0811WTD4N?mcid=d451df40f0a3368fb16aecaf08685201&th=1&psc=1&hvocijid=5223380134859239549-B0811WTD4N-&hvexpln=75&tag=googshopde-21&linkCode=df0&hvadid=696184104678&hvpos=&hvnetw=g&hvrand=5223380134859239549&hvpone=&hvptwo=&hvqmt=&hvdev=c&hvdvcmdl=&hvlocint=&hvlocphy=9042225&hvtargid=pla-2281435176138&psc=1&gad_source=1) 
 to the Tang Nano 9K
 
-| Port		| FT232H		| TangNano 9k 	|
-| --------- | ------------- | ------------- |
-| jtag_clk  | AD0, AD_BUS_0 | 25			|
-| jtag_tms	| AD3, AD_BUS_3	| 26			|
+| Port		| FT232H		         | TangNano 9k 	 |
+| --------- | ---------------------- | ------------- |
+| jtag_clk  | AD0, AD_BUS_0 (output) | 25			 |
+| jtag_tdi  | AD1, AD_BUS_1 (input)  | 28 (jtag_tdo) |
+| jtag_tdo  | AD2, AD_BUS_2 (output) | 27 (jtag_tdi) |
+| jtag_tms	| AD3, AD_BUS_3	(output) | 26			 |
+
+TDO on one device is connected to TDI on the other.
 
 #### Erros and Warnings
 

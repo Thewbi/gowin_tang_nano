@@ -22,11 +22,13 @@ module top(
 	input uart_rx,          // UART RX
     input btn1_n,           // push button 1 (active low)
     input jtag_clk,
+    input jtag_tdi,
     input jtag_tms,
 
     // output
     output wire [5:0] led,  // 6 LEDS pin
-	output uart_tx          // UART TX
+	output uart_tx,         // UART TX
+    output jtag_tdo
 
 );
 
@@ -67,7 +69,7 @@ wire[7:0]                       tx_data;
 wire[7:0]                       tx_cnt;
 
 // DEBUG control the uart tx
-reg printf;
+reg printf = 1'b0;
 
 wire                            tx_data_ready; // output of the tx module. Asserted when transmission has been performed
 wire[7:0]                       rx_data;
@@ -84,14 +86,14 @@ uart_controller
 	.rst_n                      (sys_rst_n),
     .tx_str                     (tx_str),
     .printf                     (printf),
-    .tx_data_ready (tx_data_ready),
-    .o_tx_data_valid (tx_data_valid),
-    .rx_data(rx_data),
-    .rx_data_valid(rx_data_valid),
+    .tx_data_ready              (tx_data_ready),
+    .o_tx_data_valid            (tx_data_valid),
+    .rx_data                    (rx_data),
+    .rx_data_valid              (rx_data_valid),
 
     // output
-    .o_tx_cnt                     (tx_cnt),
-	.o_tx_data                    (tx_data)
+    .o_tx_cnt                   (tx_cnt),
+	.o_tx_data                  (tx_data)
     
 );
 
@@ -153,6 +155,14 @@ Debounce_Switch debounce_Inst
     .o_Switch(w_Switch_1)
 );
 
+//
+// JTAG register
+// 
+
+reg [31:0] ir_register;
+reg ir_save_register; // stores ir_register[0] bit before the shift is executed so that this bit can be transmitted on the falling JTAG_CLK edge
+reg jtag_tdo_reg;
+assign jtag_tdo = jtag_tdo_reg;
 //
 // JTAG State Machine
 //
@@ -302,6 +312,22 @@ end
 */
 
 
+/**/
+always @(negedge jtag_clk)
+begin
+
+    case (cur_state)
+        
+        SHIFT_IR: // 11d = 0x0B = b1011
+        begin
+            jtag_tdo_reg <= ir_save_register;
+        end
+
+    endcase 
+    
+end
+
+
 // combinational always block for next state logic
 //always @(posedge sys_clk)
 always @(posedge jtag_clk)
@@ -319,6 +345,7 @@ begin
     if (!sys_rst_n)
     begin
         r_led_reg <= ~6'b0;
+        ir_register <= 32'b0;
     end
 
     //if (w_Switch_1 == 1'b0 && r_Switch_1 == 1'b1)
@@ -340,6 +367,11 @@ begin
                 // LED pattern
                 //r_led_reg <= ~6'd0; // turn off all leds
 
+                // reset the IR register to 0x00;
+                ir_register <= 32'b0;
+                
+                //jtag_tdo_reg <= 1'b1;
+
                 if (jtag_tms == 1'b0) 
                 begin
                     send_data = { "RUN_TEST_IDLE      ", 16'h0d0a };
@@ -351,7 +383,7 @@ begin
                     send_data = { "TEST_LOGIC_RESET   ", 16'h0d0a };
                     r_led_reg <= ~TEST_LOGIC_RESET;
                 end                
-                //printf = 1'b1; // write ouptut over UART!                
+                //printf = 1'b1; // write output over UART!                
             end
 
             // State Id: 1
@@ -368,7 +400,7 @@ begin
                     next_state = SELECT_DR_SCAN;
                     r_led_reg <= ~SELECT_DR_SCAN;
                 end                
-                //printf = 1'b1; // write ouptut over UART!
+                //printf = 1'b1; // write output over UART!
             end
 
             // State Id: 2
@@ -386,7 +418,7 @@ begin
                     next_state = SELECT_IR_SCAN;
                     r_led_reg <= ~SELECT_IR_SCAN;
                 end                
-                //printf = 1'b1; // write ouptut over UART!
+                //printf = 1'b1; // write output over UART!
             end
 
             // State Id: 3
@@ -404,7 +436,7 @@ begin
                     next_state = EXIT1_DR;
                     r_led_reg <= ~EXIT1_DR;
                 end                
-                //printf = 1'b1; // write ouptut over UART!
+                //printf = 1'b1; // write output over UART!
             end
 
             // State Id: 4
@@ -421,7 +453,7 @@ begin
                     next_state = EXIT1_DR;
                     r_led_reg <= ~EXIT1_DR;
                 end                
-                //printf = 1'b1; // write ouptut over UART!
+                //printf = 1'b1; // write output over UART!
             end
 
             // State Id: 5
@@ -439,7 +471,7 @@ begin
                     next_state = UPDATE_DR;
                     r_led_reg <= ~UPDATE_DR;
                 end                
-                //printf = 1'b1; // write ouptut over UART!
+                //printf = 1'b1; // write output over UART!
             end
 
             // State Id: 6
@@ -456,7 +488,7 @@ begin
                     next_state = EXIT2_DR;
                     r_led_reg <= ~EXIT2_DR;
                 end                
-                //printf = 1'b1; // write ouptut over UART!
+                //printf = 1'b1; // write output over UART!
             end
 
             // State Id: 7
@@ -474,7 +506,7 @@ begin
                     next_state = UPDATE_DR;
                     r_led_reg <= ~UPDATE_DR;
                 end                
-                //printf = 1'b1; // write ouptut over UART!
+                //printf = 1'b1; // write output over UART!
             end
 
             // State Id: 8
@@ -492,7 +524,7 @@ begin
                     next_state = SELECT_DR_SCAN;
                     r_led_reg <= ~SELECT_DR_SCAN;
                 end                
-                //printf = 1'b1; // write ouptut over UART!
+                //printf = 1'b1; // write output over UART!
             end
 
             // State Id: 9
@@ -510,12 +542,15 @@ begin
                     next_state = TEST_LOGIC_RESET;
                     r_led_reg <= ~TEST_LOGIC_RESET;
                 end                
-                //printf = 1'b1; // write ouptut over UART!
+                //printf = 1'b1; // write output over UART!
             end
 
             // State Id: 10
             CAPTURE_IR:  
             begin
+
+                
+
                 if (jtag_tms == 1'b0) 
                 begin
                     send_data = { "SHIFT_IR           ", 16'h0d0a };
@@ -528,23 +563,36 @@ begin
                     next_state = EXIT1_IR;
                     r_led_reg <= ~EXIT1_IR;
                 end                
-                //printf = 1'b1; // write ouptut over UART!
+                //printf = 1'b1; // write output over UART!
+
+                
+
             end
 
             // State Id: 11
             SHIFT_IR:  
-            begin
+            begin                
+
                 if (jtag_tms == 1'b0) 
                 begin
-                    send_data = { "SHIFT_IR           ", 16'h0d0a };
+                    
                     r_led_reg <= ~SHIFT_IR;
+
+                    //jtag_tdo_reg <= 1'b1;
+
+                    ir_save_register <= ir_register[0];
+                    ir_register <= { jtag_tdi, ir_register[31:1] };
+
+                    send_data <= { "SHIFT_IR           ", ir_register,  16'h0d0a };
                 end
                 else
                 begin
                     send_data = { "EXIT1_IR           ", 16'h0d0a };
                     next_state = EXIT1_IR;
                     r_led_reg <= ~EXIT1_IR;
-                end                
+                end
+
+                printf = ~printf;
                 //printf = 1'b1; // write ouptut over UART!
             end
 
@@ -627,7 +675,7 @@ begin
 
                 // write ouptut over UART!
                 send_data = { "TEST_LOGIC_RESET       ", 16'h0d0a };
-                printf = 1'b1;
+                //printf = 1'b1;
 
                 // next state
                 next_state = TEST_LOGIC_RESET;

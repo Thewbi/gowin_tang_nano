@@ -28,7 +28,8 @@ reg[2:0]                         bit_cnt;//bit counter
 reg[7:0]                         tx_data_latch; //latch data to send
 reg                              tx_reg; //serial data output
 assign tx_pin = tx_reg;
-always@(posedge clk or negedge rst_n)
+
+always @(posedge clk or negedge rst_n)
 begin
 	if(rst_n == 1'b0)
 		state <= S_IDLE;
@@ -36,7 +37,7 @@ begin
 		state <= next_state;
 end
 
-always@(*)
+always @(*)
 begin
 	case(state)
 		S_IDLE:
@@ -63,7 +64,8 @@ begin
 			next_state <= S_IDLE;
 	endcase
 end
-always@(posedge clk or negedge rst_n)
+
+always @(posedge clk or negedge rst_n)
 begin
 	if(rst_n == 1'b0)
 		begin
@@ -78,8 +80,7 @@ begin
 			tx_data_ready <= 1'b1;
 end
 
-
-always@(posedge clk or negedge rst_n)
+always @(posedge clk or negedge rst_n)
 begin
 	if(rst_n == 1'b0)
 		begin
@@ -90,7 +91,7 @@ begin
 		
 end
 
-always@(posedge clk or negedge rst_n)
+always @(posedge clk or negedge rst_n)
 begin
 	if(rst_n == 1'b0)
 		begin
@@ -106,7 +107,7 @@ begin
 end
 
 
-always@(posedge clk or negedge rst_n)
+always @(posedge clk or negedge rst_n)
 begin
 	if(rst_n == 1'b0)
 		cycle_cnt <= 16'd0;
@@ -116,7 +117,7 @@ begin
 		cycle_cnt <= cycle_cnt + 16'd1;	
 end
 
-always@(posedge clk or negedge rst_n)
+always @(posedge clk or negedge rst_n)
 begin
 	if(rst_n == 1'b0)
 		tx_reg <= 1'b1;
