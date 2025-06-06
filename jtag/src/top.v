@@ -164,6 +164,10 @@ reg [31:0] ir_shift_register;
 reg [31:0] ir_data_register;
 reg ir_save_register; // stores ir_shift_register[0] bit before the shift is executed so that this bit can be transmitted on the falling JTAG_CLK edge
 
+reg bypass_shift_register;
+reg bypass_register;
+reg bypass_save_register;
+
 reg [31:0] dr_shift_register;
 reg dr_save_register; // stores dr_shift_register[0] bit before the shift is executed
 
@@ -201,7 +205,8 @@ parameter UPDATE_IR         = 6'b001111; // 15d = 0x0F = b1111
 
 parameter JTAG_ID = 32'h12345678; // JTAG ID of this device
 
-parameter IDCODE_INSTRUCTION = 32'hFFFFFFFF; // Instruction to use the IDCODE register as data register pair
+parameter IDCODE_INSTRUCTION = 32'h55555555; // Instruction to use the IDCODE register as data register pair
+parameter BYPASS_INSTRUCTION = 32'hFFFFFFFF;
 parameter CUSTOM_REGISTER_1_INSTRUCTION = 32'h0A0B0C0D;
 
 // current and next_state
@@ -331,7 +336,7 @@ end
 */
 
 
-/**/
+/* write save register bit to TDO on negedge */
 always @(negedge jtag_clk)
 begin
 
@@ -344,8 +349,25 @@ begin
 
         SHIFT_DR:
         begin
-            jtag_tdo_reg <= dr_save_register;
-            //jtag_tdo_reg <=  1'b1;
+
+            case (ir_data_register)
+
+                IDCODE_INSTRUCTION:
+                    begin
+                        jtag_tdo_reg <= dr_save_register;
+                    end
+
+                BYPASS_INSTRUCTION:
+                    begin
+                        jtag_tdo_reg <= bypass_save_register;
+                    end
+
+                CUSTOM_REGISTER_1_INSTRUCTION:
+                    begin
+                        jtag_tdo_reg <= dr_save_register;
+                    end                    
+
+            endcase
         end
 
     endcase 
@@ -458,11 +480,22 @@ begin
                 
                     IDCODE_INSTRUCTION:
                     begin
+                        send_data <= { "CAPTURE_DR A       ", 16'h0d0a };
+
                         dr_shift_register <= id_code_register;
+                    end
+
+                    BYPASS_INSTRUCTION:
+                    begin
+                        send_data <= { "CAPTURE_DR B       ", 16'h0d0a };
+
+                        bypass_shift_register <= bypass_register;
                     end
 
                     CUSTOM_REGISTER_1_INSTRUCTION:
                     begin
+                        send_data <= { "CAPTURE_DR C       ", 16'h0d0a };
+
                         dr_shift_register <= dr_custom_register_1;
                     end
 
@@ -470,7 +503,7 @@ begin
     
                 next_state <= CAPTURE_DR;
 
-                send_data <= { "CAPTURE_DR         ", 16'h0d0a };                    
+                //send_data <= { "CAPTURE_DR         ", 16'h0d0a };                    
                 r_led_reg <= ~CAPTURE_DR;
             end
             else
@@ -499,8 +532,9 @@ begin
             end
             else
             begin
-                send_data <= { "TO EXIT1_DR        ", 16'h0d0a };
                 next_state <= EXIT1_DR;
+
+                send_data <= { "TO EXIT1_DR        ", 16'h0d0a };                
                 r_led_reg <= ~EXIT1_DR;
             end
             printf = ~printf;
@@ -512,20 +546,47 @@ begin
             if (jtag_tms == 1'b0) 
             begin
                 // during: SHIFT_DR
-                dr_save_register <= dr_shift_register[0];
-                dr_shift_register <= { jtag_tdi, dr_shift_register[31:1] };
 
-                send_data <= { "SHIFT_DR           ", 16'h0d0a };
+                case (ir_data_register)
+
+                    IDCODE_INSTRUCTION:
+                        begin
+                            send_data <= { "SHIFT_DR A         ", 16'h0d0a };
+
+                            dr_save_register <= dr_shift_register[0];
+                            dr_shift_register <= { jtag_tdi, dr_shift_register[31:1] };
+                        end
+
+                    BYPASS_INSTRUCTION:
+                        begin
+                            send_data <= { "SHIFT_DR B         ", 16'h0d0a };
+
+                            bypass_save_register <= bypass_shift_register;
+                            bypass_shift_register <= jtag_tdi;
+                        end
+
+                    CUSTOM_REGISTER_1_INSTRUCTION:
+                        begin
+                            send_data <= { "SHIFT_DR C         ", 16'h0d0a };
+
+                            dr_save_register <= dr_shift_register[0];
+                            dr_shift_register <= { jtag_tdi, dr_shift_register[31:1] };
+                        end                    
+
+                endcase
+
+                //send_data <= { "SHIFT_DR           ", 16'h0d0a };
                 r_led_reg <= ~SHIFT_DR;
             end
             else
             begin
-                // on Exit: SHIFT_DR
+                // on exit: SHIFT_DR
                 dr_save_register <= dr_shift_register[0];
                 dr_shift_register <= { jtag_tdi, dr_shift_register[31:1] };
 
-                send_data <= { "EXIT1_DR           ", 16'h0d0a };
                 next_state <= EXIT1_DR;
+
+                send_data <= { "EXIT1_DR           ", 16'h0d0a };                
                 r_led_reg <= ~EXIT1_DR;
             end
             printf = ~printf;       
@@ -536,14 +597,36 @@ begin
         begin
             if (jtag_tms == 1'b0) 
             begin
-                send_data <= { "PAUSE_DR           ", 16'h0d0a };
                 next_state <= PAUSE_DR;
+
+                send_data <= { "PAUSE_DR           ", 16'h0d0a };                
                 r_led_reg <= ~PAUSE_DR;
             end
             else
             begin
-                send_data <= { "UPDATE_DR          ", 16'h0d0a };
+                // on enter: UPDATE_DR from EXIT1_DR
+                case (ir_data_register)
+                
+                    IDCODE_INSTRUCTION:
+                    begin
+                        id_code_register <= dr_shift_register;
+                    end
+
+                    BYPASS_INSTRUCTION:
+                    begin
+                        bypass_register <= bypass_shift_register;
+                    end
+
+                    CUSTOM_REGISTER_1_INSTRUCTION:
+                    begin
+                        dr_custom_register_1 <= dr_shift_register;
+                    end
+
+                endcase
+
                 next_state <= UPDATE_DR;
+
+                send_data <= { "UPDATE_DR          ", 16'h0d0a };                
                 r_led_reg <= ~UPDATE_DR;
             end
             printf = ~printf;
@@ -559,8 +642,9 @@ begin
             end
             else
             begin
-                send_data <= { "EXIT2_DR           ", 16'h0d0a };
                 next_state <= EXIT2_DR;
+
+                send_data <= { "EXIT2_DR           ", 16'h0d0a };                
                 r_led_reg <= ~EXIT2_DR;
             end
             printf = ~printf;
@@ -571,18 +655,25 @@ begin
         begin
             if (jtag_tms == 1'b0) 
             begin
-                send_data <= { "SHIFT_DR           ", 16'h0d0a };
+
                 next_state <= SHIFT_DR;
+
+                send_data <= { "SHIFT_DR           ", 16'h0d0a };                
                 r_led_reg <= ~SHIFT_DR;
             end
             else
             begin
-                // on enter: UPDATE_DR
+                // on enter: UPDATE_DR from EXIT2_DR
                 case (ir_data_register)
                 
                     IDCODE_INSTRUCTION:
                     begin
                         id_code_register <= dr_shift_register;
+                    end
+
+                    BYPASS_INSTRUCTION:
+                    begin
+                        bypass_register <= bypass_shift_register;
                     end
 
                     CUSTOM_REGISTER_1_INSTRUCTION:
@@ -606,14 +697,16 @@ begin
         begin
             if (jtag_tms == 1'b0) 
             begin
-                send_data <= { "RUN_TEST_IDLE      ", 16'h0d0a };
                 next_state <= RUN_TEST_IDLE;
+
+                send_data <= { "RUN_TEST_IDLE      ", 16'h0d0a };                
                 r_led_reg <= ~RUN_TEST_IDLE;
             end
             else
             begin
-                send_data <= { "SELECT_DR_SCAN     ", 16'h0d0a };
                 next_state <= SELECT_DR_SCAN;
+
+                send_data <= { "SELECT_DR_SCAN     ", 16'h0d0a };                
                 r_led_reg <= ~SELECT_DR_SCAN;
             end
 
@@ -653,7 +746,7 @@ begin
         begin
             if (jtag_tms == 1'b0) 
             begin
-                // on enter SHIFT_IR
+                // on enter: SHIFT_IR
                 // nop
 
                 next_state <= SHIFT_IR;
@@ -664,7 +757,7 @@ begin
             else
             begin
 
-                // on enter EXIT1_IR
+                // on enter: EXIT1_IR
                 // nop
 
                 next_state <= EXIT1_IR;
@@ -690,11 +783,11 @@ begin
             end
             else
             begin
-                // on Exit: SHIFT_IR
+                // on exit: SHIFT_IR
                 ir_save_register <= ir_shift_register[0];
                 ir_shift_register <= { jtag_tdi, ir_shift_register[31:1] };
 
-                // on Enter: EXIT1_IR
+                // on enter: EXIT1_IR
                 // nop
 
                 next_state = EXIT1_IR;
@@ -720,7 +813,9 @@ begin
             end
             else
             begin
-                // on enter: UPDATE_IR
+                // on enter: UPDATE_IR from EXIT1_IR
+
+                ir_data_register <= ir_shift_register;
 
                 next_state <= UPDATE_IR;
 
@@ -764,7 +859,7 @@ begin
             end
             else
             begin
-                // on enter: UPDATE_IR
+                // on enter: UPDATE_IR from EXIT2_IR
                 ir_data_register <= ir_shift_register;
 
                 next_state <= UPDATE_IR;
