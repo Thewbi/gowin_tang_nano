@@ -160,16 +160,20 @@ Debounce_Switch debounce_Inst
 // JTAG register
 // 
 
+
 reg [31:0] ir_shift_register;
 reg [31:0] ir_data_register;
-reg ir_save_register; // stores ir_shift_register[0] bit before the shift is executed so that this bit can be transmitted on the falling JTAG_CLK edge
+// stores ir_shift_register[0] bit before the shift is executed 
+// so that this bit can be transmitted on the falling JTAG_CLK edge
+reg ir_save_register; 
 
 reg bypass_shift_register;
 reg bypass_register;
 reg bypass_save_register;
 
 reg [31:0] dr_shift_register;
-reg dr_save_register; // stores dr_shift_register[0] bit before the shift is executed
+// stores dr_shift_register[0] bit before the shift is executed
+reg dr_save_register; 
 
 reg [31:0] dr_custom_register_1 = 32'h0A0B0C0D;
 
@@ -203,9 +207,11 @@ parameter PAUSE_IR          = 6'b001101; // 13d = 0x0D = b1101
 parameter EXIT2_IR          = 6'b001110; // 14d = 0x0E = b1110
 parameter UPDATE_IR         = 6'b001111; // 15d = 0x0F = b1111
 
-parameter JTAG_ID = 32'h12345678; // JTAG ID of this device
+// JTAG ID of this device
+parameter JTAG_ID = 32'h12345678; 
 
-parameter IDCODE_INSTRUCTION = 32'h55555555; // Instruction to use the IDCODE register as data register pair
+// Instruction to use the IDCODE register as data register pair
+parameter IDCODE_INSTRUCTION = 32'h55555555; 
 parameter BYPASS_INSTRUCTION = 32'hFFFFFFFF;
 parameter CUSTOM_REGISTER_1_INSTRUCTION = 32'h0A0B0C0D;
 
@@ -217,124 +223,24 @@ reg [4:0] next_state;
 always @(posedge sys_clk) 
 begin
 
-    // if reset is asserted, go back to IDLE state
+    // if reset is asserted, 
     if (!sys_rst_n) 
     begin
+        // go back to IDLE state
         cur_state = TEST_LOGIC_RESET;
-        //r_led_reg <= 6'b000000; // turn off all leds
-        //ir_data_register <= IDCODE_INSTRUCTION;
-        //id_code_register <= JTAG_ID;
-    end
-
-    // else transition to the next state
+    end    
     else 
     begin
+        // else transition to the next state
         cur_state = next_state;
     end
   
 end
 
-//input jtag_clk,
-//input jtag_tms,
-
-/* JTAG Clock Test 
-reg [5:0] jtag_clk_counter;
-always @(posedge jtag_clk)
-begin
-    if (!sys_rst_n)
-    begin
-        jtag_clk_counter = 6'b0;
-        r_led_reg <= ~jtag_clk_counter;
-    end
-    else 
-    begin
-        jtag_clk_counter <= jtag_clk_counter + 6'b1;
-        r_led_reg <= ~jtag_clk_counter;
-    end
-end
-*/
-
-// the JTAG clock is slower than the FPGA clock therefore
-// the FPGA will sample the JTAG clock several times and
-// cause several actions. Therefore the FGPA sampling process
-// is artificially "slowed down" by a counter. 
-//
-// The counter is reset, whenever it scans a high JTAG clock.
-// Only when the counter runs out, the JTAG clock signal will cause
-// an action. The counter counts over the falling
-// edge of the JTAG clock and hence the FPGA cannot cause an action twice or more
-// for a single JTAG clock tick. 
-//parameter c_TRANSITION_LIMIT = 250000; // 10 ms at 25 MHz (works for very slow operation)
-parameter c_TRANSITION_LIMIT = 25000;
 reg transition;
 reg jtag_tms_storage;
 reg count_started;
 reg [24:0] transition_counter;
-
-/*
-always @(posedge sys_clk)
-begin
-
-    // the JTAG clock goes high
-    if (jtag_clk == 1'b1)
-    begin
-        // start counting
-        count_started = 1'b1; 
-
-        // do not transition the state machine
-        transition = 1'b0;
-        // reset the counter
-        transition_counter = 25'b0;
-
-        //jtag_tms_storage = jtag_tms;
-    end
-
-    if (next_state == cur_state) 
-    begin
-        // do not transition any more once the transition has been completed
-        transition = 1'b0;
-    end
-
-    if (transition_counter == 25'd20000)
-    begin
-        jtag_tms_storage = jtag_tms;
-    end
-
-    // while counting, increment the counter
-    if ((transition_counter < c_TRANSITION_LIMIT) & (count_started == 1'b1))
-    begin
-        transition_counter = transition_counter + 1'b1;
-    end
-
-    // when the timer has run out, reset counter and perform action
-    if ((transition_counter >= c_TRANSITION_LIMIT) & (count_started == 1'b1))
-    begin
-        // stop counting
-        count_started = 1'b0;
-
-        // this is the action, make the state machine transition into it's next state
-        transition = 1'b1;
-    end
-
-end
-*/
-
-/*
-always @(posedge sys_clk)
-begin
-
-    // the JTAG clock goes high
-    if (jtag_clk == 1'b1)
-    begin
-        jtag_tms_storage = jtag_tms;
-
-        // this is the action, make the state machine transition into it's next state
-        transition = 1'b1;
-    end
-
-end
-*/
-
 
 /* write save register bit to TDO on negedge */
 always @(negedge jtag_clk)
@@ -342,7 +248,8 @@ begin
 
     case (cur_state)
         
-        SHIFT_IR: // 11d = 0x0B = b1011
+        // 11d = 0x0B = b1011
+        SHIFT_IR: 
         begin
             jtag_tdo_reg <= ir_save_register;
         end
@@ -374,63 +281,9 @@ begin
     
 end
 
-/*
-always @(cur_state)
-begin
-
-    ir_data_register <= IDCODE_INSTRUCTION;
-
-
-    case (cur_state)
-    begin
-
-        TEST_LOGIC_RESET:
-        begin
-            ir_data_register <= IDCODE_INSTRUCTION;
-            id_code_register <= JTAG_ID;
-        end
-
-    end
-
-
-end*/
-
 // combinational always block for next state logic
-//always @(posedge sys_clk)
 always @(posedge jtag_clk)
-//always @(posedge jtag_2)
 begin
-
-    //r_led_reg = ~r_led_reg;
-    //printf = 1'b1;
-    //printf = ~printf;
-    //send_data = { "RUN_TEST_IDLE      ", 16'h0d0a };
-
-    // immediately silence the TX uart so it does not repeatedly send data
-    //if (printf == 1'b1)
-    //begin
-    //    printf = 1'b0;
-    //end
-
-    // latch the switch state
-    //r_Switch_1 <= w_Switch_1;
-
-    //if (!sys_rst_n)
-    //begin
-    ///    r_led_reg <= ~6'b0;
-    //    ir_register <= 32'b0;
-    //end
-
-    //if (w_Switch_1 == 1'b0 && r_Switch_1 == 1'b1)
-
-    // Data on the TDI, TMS, and normal-function inputs
-    // is captured on the rising edge of TCK. Data appears 
-    // on the TDO and normal-function output terminals on the
-    // falling edge of TCK
-    //if (transition == 1'b1)
-    //begin
-
-    //r_led_reg <= 6'b111111; // turn on all leds
 
     case (cur_state)
   
