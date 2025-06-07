@@ -237,11 +237,6 @@ begin
   
 end
 
-reg transition;
-reg jtag_tms_storage;
-reg count_started;
-reg [24:0] transition_counter;
-
 /* write save register bit to TDO on negedge */
 always @(negedge jtag_clk)
 begin
