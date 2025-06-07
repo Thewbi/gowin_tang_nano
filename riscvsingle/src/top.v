@@ -124,7 +124,16 @@ module top(
             //led[4] = led4_wire; // riscvsingle
             //led[2:0] = ~PC[2:0];
 
-            led[5:0] = ~PC[5:0];
+            // just display the current PC
+            //led[5:0] = ~PC[5:0];
+
+            led[0] <= ~led3_wire; // dmem
+            led[1] <= ~led3_wire; // dmem
+            led[2] <= ~led3_wire; // dmem
+            led[3] <= ~led3_wire; // dmem
+            led[4] <= ~led3_wire; // dmem
+            led[5] <= ~led3_wire; // dmem
+
         end
     end
 
@@ -176,13 +185,17 @@ module top(
     //parameter DATA_NUM = 11 + 2;
     //reg [DATA_NUM * 8 - 1 : 0] send_data = { "Hello World", 16'h0d0a };
 
-    parameter DATA_NUM = 4 + 2;
+    parameter DATA_NUM = 1 + 4 + 2; // 1 byte PC + 4 byte instruction + 2 byte CR LF
     reg [DATA_NUM * 8 - 1 : 0] send_data = { 32'h00000000, 16'h0d0a };
 
     // slow clock
     always @(posedge clock_out)
     begin
 
+        // output PC
+        send_data[55 : 48] = PC;
+
+        // output the instruction from FETCH phase
         send_data[47 : 16] = Instr;
 
         printf = ~printf;

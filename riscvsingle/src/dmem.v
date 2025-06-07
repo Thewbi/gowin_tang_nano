@@ -25,6 +25,7 @@ module dmem(
     always @(posedge clk)
     begin
 
+/*
         if (reset_n == 1'b0)
         begin
             //temp_led = 1'b0;
@@ -34,10 +35,19 @@ module dmem(
         begin
             temp_led = ~temp_led;
         end
+*/
 
         if (we)
         begin
             RAM[a[31:2]] <= wd;
+
+            //if (a[31:2] == 32'd52)
+            //begin
+            //    temp_led = ~temp_led;
+            //end
+
+            temp_led = ~temp_led;
+
         end
 
     end
