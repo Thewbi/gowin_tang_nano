@@ -25,6 +25,8 @@ module jtag_tap
 // JTAG registers
 // 
 
+// RISCV Debug Spec: JTAG TAPs used as a DTM must have an IR of at least 5 bits. 
+// When the TAP is reset, IR must default to 00001, selecting the IDCODE instruction. 
 reg [31:0] ir_shift_register;
 reg [31:0] ir_data_register;
 // stores ir_shift_register[0] bit before the shift is executed 
@@ -75,8 +77,9 @@ localparam UPDATE_IR         = 6'b001111; // 15d = 0x0F = b1111
 localparam JTAG_ID = 32'h12345678; 
 
 // Instruction to use the IDCODE register as data register pair
-localparam IDCODE_INSTRUCTION = 32'h55555555; 
+localparam IDCODE_INSTRUCTION = 32'h00000001; // specified in the RISCV debug spec (6.1.2. JTAG DTM Registers) 
 localparam BYPASS_INSTRUCTION = 32'hFFFFFFFF;
+//localparam BYPASS_INSTRUCTION = 32'h0000001F; // RISCV debug spec (6.1.6. BYPASS (at 0x1f))
 localparam CUSTOM_REGISTER_1_INSTRUCTION = 32'h0A0B0C0D;
 
 // current and next_state
