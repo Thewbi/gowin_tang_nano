@@ -22,7 +22,7 @@ module top(
 	input wire uart_rx,         // UART RX
 
     // output
-    output reg [5:0] led,       // 6 LEDS pin
+    output wire [5:0] led,       // 6 LEDS pin
 	output wire uart_tx         // UART TX
 
 );
@@ -39,22 +39,39 @@ wire cyc;
 wire stb;
 wire ack;
 
+//reg start_read_cycle;
+
+reg start_read_transaction;
+//wire [31:0] read_transaction_data;
+
+//reg [31:0] read_transaction_data_reg;
+//assign led = read_transaction_data_reg[5:0];
+//assign led = read_transaction_data;
+
+
 wishbone_master wb_master (
 
     // input
     .clk_i(sys_clk),
-    .rst_i(!sys_rst_n),
+    .rst_i(~sys_rst_n),
 
     // input master
     .data_i(read_data),
-    .cyc_o(cyc),
-    .stb_o(stb),
     .ack_i(ack),
+
+    // input wbi custom 
+    .start_read_transaction_i(start_read_transaction),
     
     // output master
     .addr_o(addr),
     .we_o(we),
-    .data_o(write_data)
+    .data_o(write_data),
+    .cyc_o(cyc),
+    .stb_o(stb),
+
+    // output wbi custom
+    //.read_transaction_data_o(read_transaction_data)
+    .read_transaction_data_o(led)
 
 );
 
@@ -62,7 +79,7 @@ wishbone_slave wb_slave (
 
     // input
     .clk_i(sys_clk),
-    .rst_i(!sys_rst_n),
+    .rst_i(~sys_rst_n),
 
     // input slave
     .addr_i(addr),
@@ -82,19 +99,57 @@ wishbone_slave wb_slave (
 //
 
 reg [31:0] counter;
-reg led_reg;
+
+//reg [5:0] led_reg;
+//assign led = led_reg;
 
 always @(posedge sys_clk)
 begin
     counter <= counter + 1;
+
+    //led <= read_transaction_data[5:0];
+
+    //if (ack == 1)
+    //begin
+    //    read_transaction_data_reg = read_transaction_data;
+    //end
 
     if (counter == 32'd27000000)
     begin
         counter <= 32'd0;
 
         // perform action every second
+
+        /*
+        led[0] <= 0;
+        led[1] <= 0;
+        led[2] <= 0;
+        led[3] <= 0;
+        led[4] <= 0;
         led_reg <= ~led_reg;
         led[5] <= led_reg;
+        */
+
+        // clear leds
+        //led_reg = 6'b000000;
+
+        // start a wishbone read
+        //start_read_cycle <= ~start_read_cycle;
+        start_read_transaction <= ~start_read_transaction;
+
+        /*
+        if (start_read_transaction == 1)
+        begin
+            led <= ~read_transaction_data[5:0];
+        end
+        else
+        begin
+            led <= 6'b111111;
+        end
+        */
+
+        //led <= ~read_transaction_data[5:0];
+
     end
 end
 
