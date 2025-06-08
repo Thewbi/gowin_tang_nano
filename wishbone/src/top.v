@@ -86,7 +86,10 @@ wishbone_slave wb_slave (
     .we_i(we),
     .data_i(write_data),
     .cyc_i(cyc),
-    .stb_i(stb),    
+    .stb_i(stb),
+
+    // input custom wbi
+    .slave_remote_data_source_in(rx_data),
 
     // output slave
     .data_o(read_data),    
@@ -175,7 +178,7 @@ wire                             tx_data_ready;
 reg[7:0]                         tx_cnt;
 */
 
-wire[7:0]                        rx_data; // received data
+wire [7:0]                       rx_data; // received data
 wire                             rx_data_valid; // data has been received
 wire                             rx_data_ready; // determines if RX is enabled or not
 

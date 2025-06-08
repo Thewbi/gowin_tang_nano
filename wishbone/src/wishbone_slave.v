@@ -12,6 +12,9 @@ module wishbone_slave
     input wire cyc_i,
     input wire stb_i,
 
+    // wbi input custom
+    input wire [7:0] slave_remote_data_source_in,
+
     // output (slaves)
     output wire [31:0] data_o,
     output wire ack_o
@@ -78,7 +81,8 @@ begin
             if (cyc_i == 1 || stb_i == 1)
             begin
                 // present the read data
-                data_o_reg = ~32'b101010;
+                //data_o_reg = ~32'b101010;
+                data_o_reg = ~slave_remote_data_source_in;
                 ack_o_reg = 1;
 
                 next_state = READ;
