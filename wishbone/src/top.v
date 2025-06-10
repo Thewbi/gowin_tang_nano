@@ -28,18 +28,41 @@ module top(
 );
 
 //
+// UART application
+//
+
+parameter                        CLK_FRE  = 27; // Mhz. The Tang Nano 9K has a 27 Mhz clock source on board
+parameter                        UART_FRE = 115200; // baudrate
+
+// UART transmission
+//reg[7:0]                         tx_data;
+reg[7:0]                         tx_str;
+//reg                              tx_data_valid; // determines if TX is enabled or not
+wire                             tx_data_ready; // output by the UART tx module if a transmission has terminated
+reg[7:0]                         tx_cnt;
+
+// UART reception
+wire [7:0]                       rx_data; // received data
+wire                             rx_data_valid; // data has been received
+wire                             rx_data_ready; // determines if RX is enabled or not
+
+
+//
 // wishbone
 //
 
 wire [31:0] addr;
 wire we;
 wire [31:0] write_data;
+wire [31:0] write_data_ignored;
 wire [31:0] read_data;
 wire cyc;
 wire stb;
 wire ack;
 
-reg start_read_transaction;
+reg start_read_transaction = 0;
+reg start_write_transaction = 0;
+reg[7:0] tx_data = 0;
 
 wishbone_master wb_master (
 
@@ -53,11 +76,13 @@ wishbone_master wb_master (
 
     // input wbi custom 
     .start_read_transaction_i(start_read_transaction),
+    .start_write_transaction_i(start_write_transaction),
+    .write_transaction_data_i(tx_data),
     
     // output master
     .addr_o(addr),
     .we_o(we),
-    .data_o(write_data),
+    .data_o(write_data), // output to the slave on write transactions
     .cyc_o(cyc),
     .stb_o(stb),
 
@@ -66,7 +91,8 @@ wishbone_master wb_master (
 
 );
 
-wishbone_slave wb_slave (
+/*
+wishbone_uart_rx_slave wb_uart_rx_slave (
 
     // input
     .clk_i(sys_clk),
@@ -75,7 +101,7 @@ wishbone_slave wb_slave (
     // input slave
     .addr_i(addr),
     .we_i(we),
-    .data_i(write_data),
+    .data_i(32'h00),
     .cyc_i(cyc),
     .stb_i(stb),
 
@@ -86,160 +112,101 @@ wishbone_slave wb_slave (
     .data_o(read_data),    
     .ack_o(ack)
 
+);*/
+
+
+/**/
+wire [7:0] slave_output_byte;
+wire slave_output_tx_data_valid;
+
+wishbone_uart_tx_slave wb_uart_tx_slave (
+
+    // input
+    .clk_i(sys_clk),
+    .rst_i(~sys_rst_n),
+
+    // input slave
+    .addr_i(addr),
+    .we_i(we),
+    .data_i(write_data), // the master places the data to write into write_data
+    .cyc_i(cyc),
+    .stb_i(stb),
+
+    // input custom wbi
+    .slave_remote_data_source_in(write_data), // input from the wishbone master
+    .transmission_done(tx_data_ready),
+
+    // output slave
+    .data_o(write_data_ignored), // the TX slave does not use data_o. It does not return any usefull data.
+    .ack_o(ack),
+
+    // output wbi
+    .slave_output_byte(slave_output_byte), // output to the UART TX module
+    .slave_output_tx_data_valid(slave_output_tx_data_valid) // output to the UART TX module
 );
+
+
+
+
+assign rx_data_ready = 1'b1; // always can receive data
+
+
+
+
 
 //
 // Timer - perform action every second
 //
 
+parameter BAUD_RATE = 115200; // serial baud rate, 115200 bits per second
+parameter CLK_FRE_MHZ = CLK_FRE * 1000000;
+parameter CYCLES_PER_BIT = CLK_FRE_MHZ / BAUD_RATE; // CLOCK TICKS per bit
+
 reg [31:0] counter;
+reg [7:0] tx_counter;
 
 always @(posedge sys_clk)
 begin
-    counter <= counter + 1;
+    counter = counter + 1;
 
-    if (counter == 32'd27000000)
+    if (counter == CLK_FRE_MHZ)
     begin
-        counter <= 32'd0;
+
+        counter = 32'd0;
 
         // perform action every second
 
-        // start/stop a wishbone read
+/* Enable this snippet for the wishbone RX slave
+        // start/stop a wishbone read transaction
         start_read_transaction <= ~start_read_transaction;
+*/
+
+/**/
+        // start the wishbone write transaction
+        start_write_transaction = 1;
+        tx_data = tx_data + 1;
+
+/*
+        // transmit data over the UART TX (without wishbone)
+        tx_data_valid = ~tx_data_valid;
+        tx_data = 8'h01;
+*/
 
     end
-end
 
-//
-// UART application
-//
-
-parameter                        CLK_FRE  = 27; // Mhz. The Tang Nano 9K has a 27 Mhz clock source on board
-parameter                        UART_FRE = 115200; // baudrate
-
-/*
-// the state machine that runs the demo application has three states IDLE, SEND and WAIT
-localparam                       IDLE = 0;
-localparam                       SEND = 1; // send 
-localparam                       WAIT = 2; // wait 1 second and send uart received data
-
-reg[7:0]                         tx_data;
-reg[7:0]                         tx_str;
-reg                              tx_data_valid;
-wire                             tx_data_ready;
-reg[7:0]                         tx_cnt;
-*/
-
-wire [7:0]                       rx_data; // received data
-wire                             rx_data_valid; // data has been received
-wire                             rx_data_ready; // determines if RX is enabled or not
-
-/*
-reg[31:0]                        wait_cnt;
-reg[3:0]                         state;
-*/
-
-assign rx_data_ready = 1'b1; // always can receive data,
-
-/*
-always@(posedge sys_clk or negedge sys_rst_n)
-begin
-	if (sys_rst_n == 1'b0)
-	begin
-		wait_cnt <= 32'd0;
-		tx_data <= 8'd0;
-		state <= IDLE;
-		tx_cnt <= 8'd0;
-		tx_data_valid <= 1'b0;
-	end
-	else
+/**/
+    if (counter >= (CYCLES_PER_BIT * 8))
     begin
-        case(state)
-
-            IDLE:
-            begin
-                state <= SEND;
-            end
-
-            SEND:
-            begin
-                wait_cnt <= 32'd0;
-                tx_data <= tx_str;
-
-                if (tx_data_valid == 1'b1 && tx_data_ready == 1'b1 && tx_cnt < DATA_NUM - 1) // send 12 bytes data
-                begin
-                    tx_cnt <= tx_cnt + 8'd1; // increment send data counter
-                end
-                else if (tx_data_valid == 1'b1 && tx_data_ready == 1'b1) // last byte sent is complete
-                begin
-                    tx_cnt <= 8'd0;
-                    tx_data_valid <= 1'b0;
-                    state <= WAIT;
-                end
-                else if (~tx_data_valid)
-                begin
-                    tx_data_valid <= 1'b1;
-                end
-            end
-
-            WAIT:
-            begin
-                // increment the wait counter
-                wait_cnt <= wait_cnt + 32'd1;
-
-                if (rx_data_valid == 1'b1)
-                begin
-                    tx_data_valid <= 1'b1; // tell the tx uart that data is ready for transmission
-                    tx_data <= rx_data; // send received data
-                end
-                else if (tx_data_valid && tx_data_ready)
-                begin
-                    tx_data_valid <= 1'b0; // if the tx uart signals that the character has been sent, turn of tx_data_valid
-                end
-                else if (wait_cnt >= CLK_FRE * 1000_000) // wait for 1 second
-                begin
-                    state <= SEND; // if the waiting period is over, transition back to SEND
-                end
-            end
-
-            default:
-            begin
-                state <= IDLE;
-            end
-
-        endcase
+        // stop the wishbone write transaction
+        start_write_transaction = 0;
     end
+
+
 end
 
-//
-// combinational logic
-//
 
-// `define example_1
 
-`ifdef example_1
 
-// Example 1
-
-parameter 	ENG_NUM  = 14; // 非中文字符数
-parameter 	CHE_NUM  = 2 + 1; //  中文字符数
-parameter 	DATA_NUM = CHE_NUM * 3 + ENG_NUM; // 中文字符使用UTF8，占用3个字节
-wire [ DATA_NUM * 8 - 1:0] send_data = { "你好 Tang Nano 20K", 16'h0d0a };
-
-`else
-
-// Example 2
-
-parameter 	ENG_NUM  = 19 + 1; // 非中文字符数
-parameter 	CHE_NUM  = 0; // 中文字符数
-parameter 	DATA_NUM = CHE_NUM * 3 + ENG_NUM + 1; // 中文字符使用UTF8，占用3个字节
-wire [ DATA_NUM * 8 - 1:0] send_data = { "Hello Tang Nano 20K", 16'h0d0a };
-
-`endif
-
-always@(*)
-	tx_str <= send_data[(DATA_NUM - 1 - tx_cnt) * 8 +: 8];
-*/
 
 uart_rx#
 (
@@ -255,22 +222,24 @@ uart_rx#
 	.rx_pin                     (uart_rx)
 );
 
-/*
 uart_tx#
 (
 	.CLK_FRE(CLK_FRE),
 	.BAUD_RATE(UART_FRE)
 ) uart_tx_inst
 (
-	.clk                        (sys_clk),
-	.rst_n                      (sys_rst_n),
-	.tx_data                    (tx_data),
-	.tx_data_valid              (tx_data_valid),
-	.tx_data_ready              (tx_data_ready),
-	.tx_pin                     (uart_tx)
-);
-*/
+    // input
+	.clk(sys_clk),
+	.rst_n(sys_rst_n),
+	//.tx_data(tx_data),
+    .tx_data(slave_output_byte), // the data to transmit
+	//.tx_data_valid(tx_data_valid),
+    .tx_data_valid(slave_output_tx_data_valid), // enable/disable transmission
 
+    // output
+	.tx_data_ready(tx_data_ready), // outputs 1 if the send operation has been performed
+	.tx_pin(uart_tx)
+);
 
 /*
 always@(posedge sys_clk or negedge sys_rst_n)
@@ -282,8 +251,7 @@ begin
     begin
     end
 end
-*/
-    
+*/   
 
 //
 // LED demo application

@@ -1,29 +1,37 @@
 module uart_tx
 #(
-	parameter CLK_FRE = 50,      //clock frequency(Mhz)
-	parameter BAUD_RATE = 115200 //serial baud rate
+	parameter CLK_FRE = 50,      // clock frequency(Mhz)
+	parameter BAUD_RATE = 115200 // serial baud rate
 )
 (
-	input                        clk,              //clock input
-	input                        rst_n,            //asynchronous reset input, low active 
-	input[7:0]                   tx_data,          //data to send
-	input                        tx_data_valid,    //data to be sent is valid
-	output reg                   tx_data_ready,    //send ready
-	output                       tx_pin            //serial data output
+    // input
+	input                        clk,              // clock input
+	input                        rst_n,            // asynchronous reset input, low active 
+	input[7:0]                   tx_data,          // data to send
+	input                        tx_data_valid,    // data to be sent is valid
+
+    // output
+	output reg                   tx_data_ready,    // send ready
+	output                       tx_pin            // serial data output
 );
-//calculates the clock cycle for baud rate 
+
+// calculates the clock cycle for baud rate 
 localparam                       CYCLE = CLK_FRE * 1000000 / BAUD_RATE;
-//state machine code
+// state machine code
 localparam                       S_IDLE       = 1;
-localparam                       S_START      = 2;//start bit
-localparam                       S_SEND_BYTE  = 3;//data bits
-localparam                       S_STOP       = 4;//stop bit
+localparam                       S_START      = 2;  // start bit
+localparam                       S_SEND_BYTE  = 3;  // data bits
+localparam                       S_STOP       = 4;  // stop bit
 reg[2:0]                         state;
 reg[2:0]                         next_state;
-reg[15:0]                        cycle_cnt; //baud counter
-reg[2:0]                         bit_cnt;//bit counter
-reg[7:0]                         tx_data_latch; //latch data to send
-reg                              tx_reg; //serial data output
+reg[15:0]                        cycle_cnt;         // baud counter
+reg[2:0]                         bit_cnt;           // bit counter
+reg[7:0]                         tx_data_latch;     // latch data to send
+reg                              tx_reg;            // serial data output
+
+
+
+
 assign tx_pin = tx_reg;
 always@(posedge clk or negedge rst_n)
 begin
@@ -60,6 +68,7 @@ begin
 			next_state <= S_IDLE;
 	endcase
 end
+
 always@(posedge clk or negedge rst_n)
 begin
 	if(rst_n == 1'b0)
@@ -102,10 +111,9 @@ begin
 		bit_cnt <= 3'd0;
 end
 
-
 always@(posedge clk or negedge rst_n)
 begin
-	if(rst_n == 1'b0)
+	if (rst_n == 1'b0)
 		cycle_cnt <= 16'd0;
 	else if((state == S_SEND_BYTE && cycle_cnt == CYCLE - 1) || next_state != state)
 		cycle_cnt <= 16'd0;
@@ -118,6 +126,7 @@ begin
 	if(rst_n == 1'b0)
 		tx_reg <= 1'b1;
 	else
+    begin
 		case(state)
 			S_IDLE,S_STOP:
 				tx_reg <= 1'b1; 
@@ -128,6 +137,7 @@ begin
 			default:
 				tx_reg <= 1'b1; 
 		endcase
+    end
 end
 
 endmodule 

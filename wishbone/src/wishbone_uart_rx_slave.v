@@ -1,4 +1,4 @@
-module wishbone_slave 
+module wishbone_uart_rx_slave 
 (
 
     // input
@@ -8,7 +8,7 @@ module wishbone_slave
     // input (slaves)
     input wire [31:0] addr_i,
     input wire we_i,
-    input wire [31:0] data_i,
+    input wire [31:0] data_i, // the RX slave does not use data_i
     input wire cyc_i,
     input wire stb_i,
 
@@ -16,7 +16,7 @@ module wishbone_slave
     input wire [7:0] slave_remote_data_source_in,
 
     // output (slaves)
-    output wire [31:0] data_o,
+    output wire [31:0] data_o, // the RX slave returns read RX data here
     output wire ack_o
 
 );
@@ -29,7 +29,6 @@ assign ack_o = ack_o_reg;
 
 localparam IDLE = 0;
 localparam READ = 1;
-//localparam STOP = 2;
 
 // current and next_state
 reg [1:0] cur_state = IDLE;
@@ -77,11 +76,11 @@ begin
 
         READ:
         begin
-            // The slave will keep ACK_I asserted until the master negates [STB_O] and [CYC_O] to indicate the end of the cycle.
+            // The slave will keep ACK_I asserted until the master negates 
+            // [STB_O] and [CYC_O] to indicate the end of the cycle.
             if (cyc_i == 1 || stb_i == 1)
             begin
                 // present the read data
-                //data_o_reg = ~32'b101010;
                 data_o_reg = ~slave_remote_data_source_in;
                 ack_o_reg = 1;
 
@@ -89,7 +88,7 @@ begin
             end
             else
             begin
-                data_o_reg = ~32'b11;
+                data_o_reg = ~32'b11; // output a dummy value
                 ack_o_reg = 0;
 
                 next_state = IDLE;

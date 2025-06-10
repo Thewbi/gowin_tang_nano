@@ -10,7 +10,7 @@ https://wiki.sipeed.com/hardware/en/tang/Tang-Nano-9K/Nano-9K.html
 
 
 
-# UART Project
+# Wishbone Project
 
 https://github.com/sipeed/TangNano-9K-example?tab=readme-ov-file#uart
 
@@ -51,215 +51,146 @@ Device
 Create the a new verilog file:
 File > New > Files > Verilog File > Name: top.v > Check: "Add to current project".
 
-Add this code: (Stolen from: https://wiki.sipeed.com/hardware/en/tang/Tang-Nano-9K/examples/led.html)
+# Wishbone
+
+## RX Client (wishbone_uart_rx_slave module)
+
+The wishbone RX client (wishbone_uart_rx_slave module) has an input port called, slave_remote_data_source_in.
+When the wishbone RX client is read using a wishbone read cycle, it will return the value that is currently placed
+onto the slave_remote_data_source_in port.
+
+The demo uses a UART RX module. When a byte of information is sent to the UART RX module, the UART RX module will
+store that received byte and it will place that byte into the wishbone RX client's slave_remote_data_source_in port.
+This means that first, send a byte of data to over UART, then perform a wishbone read cycle. The demo application
+puts the byte read during the wishbone cycle onto the LEDs every second. Since there are only six LEDs available
+on the TangNano 9k, only the lower 6 bits of the received byte are displayed using the LEDs.
+
+In order to activate the RX demo, edit the top module and activate wishbone rx slave as well as the the wishbone RX cycle:
 
 ```
-// the state machine that runs the demo application has three states: IDLE, SEND and WAIT
-//
-// IDLE is entered on reset. IDLE immediately transitions to SEND.
-// IDLE does not perform any action.
-//
-// SEND is entered after IDLE and when the wait period is over.
-// During SEND a string of DATA_NUM characters is transmitted, one
-// character per clock tick. Once all characters are transmitted,
-// the transition to WAIT takes place because the demo wants to 
-// wait around for some time before sending DATA_NUM characters again.
-//
-// In WAIT, the system remains still whithout sending data for one
-// second. WAIT is the only state, where the system checks for incoming data.
-// If a byte is received, that exact byte is immediately sent out over the tx line.
-// 
+wishbone_uart_rx_slave wb_uart_rx_slave (
 
-module top(
-    input sys_clk,          // clk input
-    input sys_rst_n,        // reset input
-	input uart_rx,          // UART RX
+    // input
+    .clk_i(sys_clk),
+    .rst_i(~sys_rst_n),
 
-    output reg [5:0] led,   // 6 LEDS pin
-	output uart_tx          // UART TX
+    // input slave
+    .addr_i(addr),
+    .we_i(we),
+    .data_i(32'h00),
+    .cyc_i(cyc),
+    .stb_i(stb),
+
+    // input custom wbi
+    .slave_remote_data_source_in(rx_data),
+
+    // output slave
+    .data_o(read_data),    
+    .ack_o(ack)
+
 );
 
-//
-// UART demo application
-//
 
-parameter                        CLK_FRE  = 27; // Mhz. The Tang Nano 9K has a 27 Mhz clock source on board
-parameter                        UART_FRE = 115200; // baudrate
+reg [31:0] counter;
+reg [7:0] tx_counter;
 
-// the state machine that runs the demo application has three states IDLE, SEND and WAIT
-localparam                       IDLE = 0;
-localparam                       SEND = 1; // send 
-localparam                       WAIT = 2; // wait 1 second and send uart received data
-
-reg[7:0]                         tx_data;
-reg[7:0]                         tx_str;
-reg                              tx_data_valid;
-wire                             tx_data_ready;
-reg[7:0]                         tx_cnt;
-wire[7:0]                        rx_data;
-wire                             rx_data_valid;
-wire                             rx_data_ready;
-reg[31:0]                        wait_cnt;
-reg[3:0]                         state;
-
-assign rx_data_ready = 1'b1; // always can receive data,
-
-always@(posedge sys_clk or negedge sys_rst_n)
+always @(posedge sys_clk)
 begin
-	if (sys_rst_n == 1'b0)
-	begin
-		wait_cnt <= 32'd0;
-		tx_data <= 8'd0;
-		state <= IDLE;
-		tx_cnt <= 8'd0;
-		tx_data_valid <= 1'b0;
-	end
-	else
+    counter = counter + 1;
+
+    if (counter == CLK_FRE_MHZ)
     begin
-        case(state)
 
-            IDLE:
-            begin
-                state <= SEND;
-            end
-
-            SEND:
-            begin
-                wait_cnt <= 32'd0;
-                tx_data <= tx_str;
-
-                if (tx_data_valid == 1'b1 && tx_data_ready == 1'b1 && tx_cnt < DATA_NUM - 1) // send 12 bytes data
-                begin
-                    tx_cnt <= tx_cnt + 8'd1; // increment send data counter
-                end
-                else if (tx_data_valid == 1'b1 && tx_data_ready == 1'b1) // last byte sent is complete
-                begin
-                    tx_cnt <= 8'd0;
-                    tx_data_valid <= 1'b0;
-                    state <= WAIT;
-                end
-                else if (~tx_data_valid)
-                begin
-                    tx_data_valid <= 1'b1;
-                end
-            end
-
-            WAIT:
-            begin
-                // increment the wait counter
-                wait_cnt <= wait_cnt + 32'd1;
-
-                if (rx_data_valid == 1'b1)
-                begin
-                    tx_data_valid <= 1'b1; // tell the tx uart that data is ready for transmission
-                    tx_data <= rx_data; // send received data
-                end
-                else if (tx_data_valid && tx_data_ready)
-                begin
-                    tx_data_valid <= 1'b0; // if the tx uart signals that the character has been sent, turn of tx_data_valid
-                end
-                else if (wait_cnt >= CLK_FRE * 1000_000) // wait for 1 second
-                begin
-                    state <= SEND; // if the waiting period is over, transition back to SEND
-                end
-            end
-
-            default:
-            begin
-                state <= IDLE;
-            end
-
-        endcase
-    end
+        counter = 32'd0;
+		
+		// perform action every second
+		
+		// start/stop a wishbone read transaction
+		start_read_transaction <= ~start_read_transaction;
+		
+	end
+	
 end
-
-//
-// combinational logic
-//
-
-// `define example_1
-
-`ifdef example_1
-
-// Example 1
-
-parameter 	ENG_NUM  = 14; // 非中文字符数
-parameter 	CHE_NUM  = 2 + 1; //  中文字符数
-parameter 	DATA_NUM = CHE_NUM * 3 + ENG_NUM; // 中文字符使用UTF8，占用3个字节
-wire [ DATA_NUM * 8 - 1:0] send_data = { "你好 Tang Nano 20K", 16'h0d0a };
-
-`else
-
-// Example 2
-
-parameter 	ENG_NUM  = 19 + 1; // 非中文字符数
-parameter 	CHE_NUM  = 0; // 中文字符数
-parameter 	DATA_NUM = CHE_NUM * 3 + ENG_NUM + 1; // 中文字符使用UTF8，占用3个字节
-wire [ DATA_NUM * 8 - 1:0] send_data = { "Hello Tang Nano 20K", 16'h0d0a };
-
-`endif
-
-always@(*)
-	tx_str <= send_data[(DATA_NUM - 1 - tx_cnt) * 8 +: 8];
-
-uart_rx#
-(
-	.CLK_FRE(CLK_FRE),
-	.BAUD_RATE(UART_FRE)
-) uart_rx_inst
-(
-	.clk                        (sys_clk),
-	.rst_n                      (sys_rst_n),
-	.rx_data                    (rx_data),
-	.rx_data_valid              (rx_data_valid),
-	.rx_data_ready              (rx_data_ready),
-	.rx_pin                     (uart_rx)
-);
-
-uart_tx#
-(
-	.CLK_FRE(CLK_FRE),
-	.BAUD_RATE(UART_FRE)
-) uart_tx_inst
-(
-	.clk                        (sys_clk),
-	.rst_n                      (sys_rst_n),
-	.tx_data                    (tx_data),
-	.tx_data_valid              (tx_data_valid),
-	.tx_data_ready              (tx_data_ready),
-	.tx_pin                     (uart_tx)
-);
-
-//
-// LED demo application
-//
-
-reg [23:0] counter;
-
-// update the counter variable
-always @(posedge sys_clk or negedge sys_rst_n) begin
-    if (!sys_rst_n)
-        counter <= 24'd0;
-    else if (counter < 24'd1349_9999)       // 0.5s delay
-        counter <= counter + 1'b1;
-    else
-        counter <= 24'd0;
-end
-
-
-// update the LEDs
-always @(posedge sys_clk or negedge sys_rst_n) begin
-    if (!sys_rst_n)
-        led <= 6'b111110;
-    else if (counter == 24'd1349_9999)       // 0.5s delay
-        //led[5:0] <= {led[4:0],led[5]};    // left to right
-        led[5:0] <= {led[0], led[5:1]};     // right to left
-    else
-        led <= led;
-end
-
-endmodule
 ```
+
+## TX Client (wishbone_uart_tx_slave module)
+
+The wishbone TX client (wb_uart_tx_slave instance) has an input port called, slave_output_byte.
+When the wishbone RX client is written to using a wishbone write cycle. It will return the value 
+that is currently written onto to it using a wishbone write cycle to the slave_output_byte port.
+
+The slave_output_byte is connected to a UART TX module. The TX module will transmit the written value.
+
+The demo will transmit only a single byte (by counting up from zero to CYCLES_PER_BIT * 8 clock ticks).
+Then it waits a second and transmits the data again.
+
+To use the demo, connect a terminal emulator (Putty, Yat, teraterm, ...) to the TangNano 9k and check 
+the output. A variable (tx_data) is incremented every second. The value of that variable is placed
+into the wishbone master. The wishbone master performs a write cycle every second. The wishbone
+slave puts the byte into the TX UART. Check your terminal. You should see a value count up from zero.
+
+To run the TX demo, activate the TX wishbone slave and the code that transmits a byte every second.
+
+```
+wire [7:0] slave_output_byte;
+wire slave_output_tx_data_valid;
+
+wishbone_uart_tx_slave wb_uart_tx_slave (
+
+    // input
+    .clk_i(sys_clk),
+    .rst_i(~sys_rst_n),
+
+    // input slave
+    .addr_i(addr),
+    .we_i(we),
+    .data_i(write_data), // the master places the data to write into write_data
+    .cyc_i(cyc),
+    .stb_i(stb),
+
+    // input custom wbi
+    .slave_remote_data_source_in(write_data), // input from the wishbone master
+    .transmission_done(tx_data_ready),
+
+    // output slave
+    .data_o(write_data_ignored), // the TX slave does not use data_o. It does not return any usefull data.
+    .ack_o(ack),
+
+    // output wbi
+    .slave_output_byte(slave_output_byte), // output to the UART TX module
+    .slave_output_tx_data_valid(slave_output_tx_data_valid) // output to the UART TX module
+);
+
+reg [31:0] counter;
+reg [7:0] tx_counter;
+
+always @(posedge sys_clk)
+begin
+    counter = counter + 1;
+
+    if (counter == CLK_FRE_MHZ)
+    begin
+
+        counter = 32'd0;
+
+        // perform action every second
+		
+		// start the wishbone write transaction
+        start_write_transaction = 1;
+        tx_data = tx_data + 1;
+		
+	end
+
+    if (counter >= (CYCLES_PER_BIT * 8))
+    begin
+		// stop the wishbone write transaction
+        start_write_transaction = 0;
+    end
+
+end
+```
+
+# UART
 
 ## UART RX
 
