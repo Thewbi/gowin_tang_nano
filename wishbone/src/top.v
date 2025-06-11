@@ -45,7 +45,7 @@ reg[7:0]                         tx_cnt;
 wire [7:0]                       rx_data; // received data
 wire                             rx_data_valid; // data has been received
 wire                             rx_data_ready; // determines if RX is enabled or not
-
+assign rx_data_ready = 1'b1; // always can receive data
 
 //
 // wishbone
@@ -60,8 +60,8 @@ wire cyc;
 wire stb;
 wire ack;
 
-reg start_read_transaction = 0;
-reg start_write_transaction = 0;
+reg start_read_transaction = 0; // Initially do not read
+reg start_write_transaction = 1; // Initially write
 reg[7:0] tx_data = 0;
 
 wishbone_master wb_master (
@@ -80,14 +80,15 @@ wishbone_master wb_master (
     .write_transaction_data_i(tx_data),
     
     // output master
-    .addr_o(addr),
+    .addr_o(addr), // address within a wishbone slave
     .we_o(we),
-    .data_o(write_data), // output to the slave on write transactions
+    .data_o(write_data), // output to the slave during write transactions (the master loops write_transaction_data_i through here!)
     .cyc_o(cyc),
     .stb_o(stb),
 
     // output wbi custom
-    .read_transaction_data_o(led)
+    //.read_transaction_data_o(led)
+    .read_transaction_data_o() // not connected
 
 );
 
@@ -112,13 +113,13 @@ wishbone_uart_rx_slave wb_uart_rx_slave (
     .data_o(read_data),    
     .ack_o(ack)
 
-);*/
+);
+*/
 
-
-/**/
 wire [7:0] slave_output_byte;
 wire slave_output_tx_data_valid;
 
+/*
 wishbone_uart_tx_slave wb_uart_tx_slave (
 
     // input
@@ -126,7 +127,7 @@ wishbone_uart_tx_slave wb_uart_tx_slave (
     .rst_i(~sys_rst_n),
 
     // input slave
-    .addr_i(addr),
+    .addr_i(addr), // address within a wishbone slave
     .we_i(we),
     .data_i(write_data), // the master places the data to write into write_data
     .cyc_i(cyc),
@@ -143,12 +144,37 @@ wishbone_uart_tx_slave wb_uart_tx_slave (
     // output wbi
     .slave_output_byte(slave_output_byte), // output to the UART TX module
     .slave_output_tx_data_valid(slave_output_tx_data_valid) // output to the UART TX module
+
+);
+*/
+
+
+wishbone_led_slave wb_led_slave (
+
+    // input
+    .clk_i(sys_clk),
+    .rst_i(~sys_rst_n),
+
+    // input slave
+    .addr_i(addr), // address within a wishbone slave
+    .we_i(we),
+    .data_i(write_data), // the master places the data to write into write_data
+    .cyc_i(cyc),
+    .stb_i(stb),
+
+    // input custom
+
+    // output slave
+    .data_o(write_data_ignored), // the TX slave does not use data_o. It does not return any usefull data.
+    .ack_o(ack),
+
+    // output wbi
+    .led_port_o(led) // output to the LEDs port
+
 );
 
 
 
-
-assign rx_data_ready = 1'b1; // always can receive data
 
 
 
@@ -176,17 +202,25 @@ begin
 
         // perform action every second
 
-/* Enable this snippet for the wishbone RX slave
+/* ENABLE this for the wishobe LED slave read/write */
+        tx_data = tx_data + 1;
+
+        // toggle read and write
+        start_read_transaction = ~start_read_transaction;
+        start_write_transaction = ~start_write_transaction;
+
+/* ENABLE this snippet for the wishbone RX slave
         // start/stop a wishbone read transaction
         start_read_transaction <= ~start_read_transaction;
 */
 
-/**/
+/* ENABLE for wishbone write to wishbone UART TX slave
         // start the wishbone write transaction
         start_write_transaction = 1;
         tx_data = tx_data + 1;
+*/
 
-/*
+/* ENABLE for UART direct/raw write
         // transmit data over the UART TX (without wishbone)
         tx_data_valid = ~tx_data_valid;
         tx_data = 8'h01;
@@ -194,13 +228,13 @@ begin
 
     end
 
-/**/
+/* ENABLE for wishbone write to wishbone UART TX slave
     if (counter >= (CYCLES_PER_BIT * 8))
     begin
         // stop the wishbone write transaction
         start_write_transaction = 0;
     end
-
+*/
 
 end
 

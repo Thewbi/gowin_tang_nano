@@ -207,12 +207,11 @@ HINT: Master asserts and deasserts STB_O and CYC_O at the same time!
 This means cycle and strobe are the same thing during "Classic standard SINGLE READ Cycle".
 
 (MASTER_STATE_MACHINE_STATE: IDLE
-master waits command to start a read or write cycle)
+master waits for read or write cycle)
 
 (MASTER_STATE_MACHINE_STATE: INIT_READ)
 - The master asserts STB_O and CYC_O.
 - The master deassert WE_O to denote a read operation.
-- The master assert WE_O to denote a write operation.
 - The master places an address onto ADR_O. 
 (Master transitions to MASTER_STATE_MACHINE_STATE: WAIT_FOR_CYCLE_TERMINATING_SIGNALS)
 

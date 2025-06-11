@@ -44,8 +44,6 @@ localparam WRITE = 1;
 reg [1:0] cur_state = IDLE;
 reg [1:0] next_state;
 
-//reg [1:0] tx_counter;
-
 // next state logic
 always @(posedge clk_i) 
 begin
@@ -55,7 +53,6 @@ begin
     begin
         // go back to IDLE state
         cur_state = IDLE;
-        //tx_counter = 0;
     end    
     else 
     begin
@@ -78,8 +75,6 @@ begin
 
             slave_output_tx_data_valid_reg = 0;
 
-            //tx_counter = 0;
-
             // master starts a transaction
             if (cyc_i == 1 && stb_i == 1)
             begin
@@ -93,7 +88,8 @@ begin
 
         WRITE:
         begin
-            // The slave will keep ACK_I asserted until the master negates [STB_O] and [CYC_O] to indicate the end of the cycle.
+            // The slave will keep ACK_I asserted until the master negates 
+            // [STB_O] and [CYC_O] to indicate the end of the cycle.
             if (cyc_i == 1 || stb_i == 1)
             begin
                 // present the read data
@@ -109,8 +105,6 @@ begin
                 slave_output_tx_data_valid_reg = 1; // send
 
                 ack_o_reg = 1;
-
-                //tx_counter = tx_counter + 1;
 
                 next_state = cur_state;
             end
@@ -131,8 +125,6 @@ begin
             data_o_reg = ~32'b100;            
             slave_output_tx_data_valid_reg = 0;
             ack_o_reg = 0;
-
-            //tx_counter = 0;
 
             next_state = cur_state;
         end

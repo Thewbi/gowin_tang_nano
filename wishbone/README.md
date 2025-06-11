@@ -190,6 +190,143 @@ begin
 end
 ```
 
+## Develop custom Wishbone Slave
+
+Create a new module for the wishbone slave.
+In this example, we create a LED slave that can be writen to (0 = LED off, 1 = LED on) and
+read (current status of LED). The slave has only a single internal address 0x00.
+
+```
+module wishbone_led_slave 
+(
+
+    // input
+    input wire clk_i, // clock input
+	input wire rst_i, // asynchronous reset input, low active
+
+    // input (slaves)
+    input wire [31:0] addr_i, // address within a wishbone slave
+    input wire we_i, // write enable, 1 = write, 0 = read
+    input wire [31:0] data_i, // data for the slave consumes
+    input wire cyc_i, // master starts and terminates cycle
+    input wire stb_i, // master starts and terminates strobes
+
+    // input - custom input goes here ...
+
+    // output (slaves)
+    output wire [31:0] data_o, // data that the slave produces
+    output wire ack_o // ack is deasserted until the master starts a cycle/strobe
+                        // ack has to be asserted as long as the master asserts cyc_i and stb_i
+                        // ack goes low once the master stops the cycle/strobe
+
+    // output - custom output goes here ...
+
+);
+```
+
+The LED wishbone slave can be read and written.
+It operates based on a state machine which has three states:
+
+- IDLE
+- READ
+- WRITE
+
+The slave remains in IDLE state until the master starts a cycle/strobe.
+With the beginning of a new cycle/strobe, the state machine will transition to either
+READ or WRITE depending on the value of the we_i input.
+
+The READ state checks if the master is still running the cycle/strobe and if so, will
+present the data:
+
+```
+if (cyc_i == 1 || stb_i == 1)
+begin
+	// present the read data
+	data_o_reg = internal_state_reg;
+	ack_o_reg = 1;
+
+	next_state = cur_state;
+end
+
+...
+```
+
+The write state performs no real operation! The reason is that the internal state
+is stored inside a register. The state is the value that the master writes into the slave.
+The register cannot be set inside the state machine since the state machine logic is not
+clocked. Without a clock the register is implemented as a latch and a latch will apparently
+kill the synthesized design!
+
+Instead the internal state register is written inside the next state logic which is clocked.
+Here, no latch is inferred and everything is fine.
+
+Here is the next state logic.
+
+```
+// next state logic
+always @(posedge clk_i) 
+begin
+    
+    // if reset is asserted, 
+    if (rst_i) 
+    begin
+        // go back to IDLE state
+        cur_state = IDLE;
+
+        internal_state_reg = 6'b00;
+    end    
+    else 
+    begin
+        // else transition to the next state
+        cur_state = next_state;
+
+        // store the input data into a register (Not in the state machine as
+        // the state machine is not clocked and hence the assignment to a 
+        // register would cause a latch)
+        if ((cur_state == WRITE) && (cyc_i == 1 && stb_i == 1))
+        begin
+            internal_state_reg = data_i;
+        end
+    end
+
+end
+```
+
+Here is the driver (code that actually drives read and write transactions) for the custom slave.
+
+```
+reg start_read_transaction = 0; // Initially do not read
+reg start_write_transaction = 1; // Initially write
+
+reg [31:0] counter;
+
+always @(posedge sys_clk)
+begin
+    counter = counter + 1;
+
+    if (counter == CLK_FRE_MHZ)
+    begin
+
+        counter = 32'd0;
+
+        // perform action every second
+
+/* ENABLE this for the wishobe LED slave read/write */
+        tx_data = tx_data + 1;
+
+        // toggle read and write
+        start_read_transaction = ~start_read_transaction;
+        start_write_transaction = ~start_write_transaction;
+		
+	end
+	
+end
+```
+
+The driver will perform an action each second. It will toggle read and write transactions.
+During write, it will increment a counter and write that new value into the slave.
+During read, it will read the internal state of the slave and output that state to the LEDs.
+
 # UART
 
 ## UART RX
