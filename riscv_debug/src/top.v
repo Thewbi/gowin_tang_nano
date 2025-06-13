@@ -246,22 +246,6 @@ begin
     r_led_reg <= leds;
 end
 
-//
-// For wishbone
-//
-/*
-wire [31:0] read_data; // read data connection between master and slave, output from the slave, input for the master
-wire ack; // output from the slave, input for the master
-//reg start_read_transaction = 0;
-//reg start_write_transaction = 0;
-//reg[7:0] tx_data = 0;
-
-wire [31:0] addr; // output from the master, input for the slave
-wire we; // write enable, output from the mster, input for the slave
-wire [31:0] write_data; // write data connection between master and slave, output from the master, input for the slave
-wire cyc; // output from the master, input for the slave
-wire stb; // output from the master, input for the slave
-*/
 jtag_tap #(
     .DATA_NUM(DATA_NUM)
 ) jtag_tap_inst (
@@ -282,39 +266,18 @@ jtag_tap #(
 
     // debug output
     .r_led_reg(leds),
+
+    // printf output enabled
     .send_data(send_data),
     .printf(printf),
 
-    //
-    // Wishbone
-    //
+    // printf output disabled
+    //.send_data(),
+    //.printf(),
 
-/*
-    // input
-    .clk_i(sys_clk),
-    .rst_i(~sys_rst_n),
-
-    // input from slave
-    .data_i(read_data), // data that the slave outputs and the master reads as input from the slave
-    .ack_i(ack),
-
-    // input wbi custom 
-    //.start_read_transaction_i(start_read_transaction),
-    //.start_write_transaction_i(start_write_transaction),
-    //.write_transaction_data_i(tx_data),
-    
-    // output master
-    .addr_o(addr), // address within a wishbone slave, connected to the addr_i of the slave
-    .we_o(we),
-    .data_o(write_data), // output to the slave during write transactions (the master loops write_transaction_data_i through here!)
-    .cyc_o(cyc),
-    .stb_o(stb)
-
-    // output wbi custom
-    //.read_transaction_data_o(led)
-    //.read_transaction_data_o() // not connected
-*/
-
+    // when a JTAG command for dmi (0x11) arrives, the JTAG_TAP will
+    // output commands to the wishbone master here. The wishbone master
+    // talks to the RISCV DM which is a wishbone slave.
     .start_read_transaction_o(start_read_transaction),
     .start_write_transaction_o(start_write_transaction),
     .write_transaction_data_o(wishbone_tx_data)
@@ -325,7 +288,9 @@ jtag_tap #(
 // wishbone
 //
 
-wishbone_led_slave wb_led_slave (
+wishbone_led_slave #(
+    .DATA_NUM(DATA_NUM)
+) wb_led_slave (
 
     // input
     .clk_i(sys_clk),
@@ -346,6 +311,10 @@ wishbone_led_slave wb_led_slave (
 
     // output wbi
     .led_port_o(led) // output to the LEDs port
+
+    // printf - does not work because it causes a logical cycle, the state machine is not clocked
+    //.send_data(send_data),
+    //.printf(printf)
 
 );
 

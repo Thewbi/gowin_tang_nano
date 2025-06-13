@@ -68,6 +68,7 @@ begin
   
 end
 
+// combinational always block for next state logic
 always @(*)
 begin
 

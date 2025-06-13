@@ -1,4 +1,7 @@
 module wishbone_led_slave 
+#(
+    parameter DATA_NUM = 22
+)
 (
 
     // input
@@ -22,6 +25,11 @@ module wishbone_led_slave
 
     // output - custom output goes here ...
     output wire [31:0] led_port_o
+
+    // printf - needs to be enabled in top module by assigning values to these two ports
+    // does not work because this state machine is not clocked and this causes a cycle in the tree
+    //output reg [DATA_NUM * 8 - 1:0] send_data, // printf debugging over UART
+    //output reg printf // printf debugging over UART
 
 );
 
@@ -70,6 +78,7 @@ begin
 
 end
 
+// combinational always block for next state logic
 always @(*)
 begin
 
@@ -97,6 +106,10 @@ begin
             begin
                 next_state = IDLE;
             end
+
+            //// printf - does not work because this state machine is not clocked
+            //send_data <= { "IDLE               ", 16'h0d0a };
+            //printf <= ~printf;
         end
 
         READ:
@@ -117,7 +130,11 @@ begin
                 ack_o_reg = 0;
 
                 next_state = IDLE;
-            end            
+            end
+
+            //// printf - does not work because this state machine is not clocked
+            //send_data <= { "READ               ", 16'h0d0a };
+            //printf <= ~printf;
         end
 
         WRITE:
@@ -137,7 +154,11 @@ begin
                 ack_o_reg = 0;
 
                 next_state = IDLE;
-            end            
+            end
+
+            //// printf - does not work because this state machine is not clocked
+            //send_data <= { "WRITE              ", 16'h0d0a };
+            //printf <= ~printf;
         end
 
         default:
@@ -146,6 +167,10 @@ begin
             ack_o_reg = 0;
 
             next_state = cur_state;
+
+            //// printf - does not work because this state machine is not clocked
+            //send_data <= { "default             ", 16'h0d0a };
+            //printf <= ~printf;
         end
 
     endcase

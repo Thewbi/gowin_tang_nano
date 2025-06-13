@@ -1,6 +1,6 @@
 module jtag_tap
 #(
-    parameter DATA_NUM = 22
+    parameter DATA_NUM = 22 // for printf
 )
 (
 
@@ -30,27 +30,6 @@ module jtag_tap
     output wire start_read_transaction_o,
     output wire start_write_transaction_o,
     output wire [7:0] write_transaction_data_o // byte of data that the master uses during write transactions
-    
-
-    // output wbi custom
-    //wire [31:0] read_transaction_data_o;
-
-/*
-    // input - wishbone
-    input wire clk_i, // clock input
-	input wire rst_i, // asynchronous reset input, low active
-
-    // input master
-    input wire [31:0] data_i,
-    input wire ack_i,    
-
-    // output master
-    output wire [31:0] addr_o,
-    output wire we_o,
-    output wire [31:0] data_o,
-    output reg cyc_o,
-    output reg stb_o
-*/
 
 );
 
@@ -164,7 +143,6 @@ localparam CUSTOM_REGISTER_1_INSTRUCTION = 32'h0A0B0C0D;
 reg [4:0] cur_state = TEST_LOGIC_RESET;
 reg [4:0] next_state;
 
-
 //Next steps: Insert wishbone master and slave.
 //Read and write the 44 bit dmi register 0x11 over wishbone.
 
@@ -256,6 +234,7 @@ begin
                 send_data <= { "TEST_LOGIC_RESET   ", 16'h0d0a };
                 r_led_reg <= ~TEST_LOGIC_RESET;
             end
+
             printf = ~printf;           
         end
 
@@ -275,7 +254,8 @@ begin
 
                 send_data <= { "SELECT_DR_SCAN     ", 16'h0d0a };                
                 r_led_reg <= ~SELECT_DR_SCAN;
-            end         
+            end
+      
             printf = ~printf;
         end
 
@@ -334,6 +314,7 @@ begin
                 send_data <= { "SELECT_IR_SCAN     ", 16'h0d0a };                    
                 r_led_reg <= ~SELECT_IR_SCAN;
             end
+
             printf = ~printf;
         end
 
@@ -360,6 +341,7 @@ begin
                 send_data <= { "TO EXIT1_DR        ", 16'h0d0a };                
                 r_led_reg <= ~EXIT1_DR;
             end
+
             printf = ~printf;
         end
 
@@ -453,7 +435,8 @@ begin
                 send_data <= { "EXIT1_DR           ", 16'h0d0a };                
                 r_led_reg <= ~EXIT1_DR;
             end
-            printf = ~printf;       
+
+            printf = ~printf;
         end
 
         // State Id: 5
@@ -540,6 +523,7 @@ begin
                 send_data <= { "UPDATE_DR          ", 16'h0d0a };                
                 r_led_reg <= ~UPDATE_DR;
             end
+
             printf = ~printf;
         end
 
@@ -560,6 +544,7 @@ begin
                 send_data <= { "EXIT2_DR           ", 16'h0d0a };                
                 r_led_reg <= ~EXIT2_DR;
             end
+
             printf = ~printf;
         end
 
@@ -846,6 +831,7 @@ begin
                 next_state <= SELECT_DR_SCAN;
                 r_led_reg <= ~SELECT_DR_SCAN;
             end
+
             printf = ~printf;
         end
 
