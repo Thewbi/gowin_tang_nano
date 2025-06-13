@@ -29,7 +29,9 @@ module jtag_tap
 
     output wire start_read_transaction_o,
     output wire start_write_transaction_o,
-    output wire [7:0] write_transaction_data_o // byte of data that the master uses during write transactions
+
+    output wire [31:0] addr_o, // address for the wishbone master to write to / read from
+    output wire [31:0] write_transaction_data_o // byte of data that the master uses during write transactions
 
 );
 
@@ -37,15 +39,14 @@ module jtag_tap
 // Wishbone
 //
 
-// input wbi custom
 reg start_read_transaction_o_reg;
 assign start_read_transaction_o = start_read_transaction_o_reg;
 
 reg start_write_transaction_o_reg;
 assign start_write_transaction_o = start_write_transaction_o_reg;
 
-reg [7:0] write_transaction_data_o_reg; // byte of data that the master uses during write transactions
-assign write_transaction_data_o = write_transaction_data_o_reg;
+reg [31:0] write_transaction_data_o_reg; // byte of data that the master uses during write transactions
+//assign write_transaction_data_o = write_transaction_data_o_reg;
 
 // output wbi custom
 //wire [31:0] read_transaction_data_o;
@@ -75,9 +76,14 @@ localparam DMI_REGISTER_WIDTH = 10 + 32 + 2; // 10 address bits, 32 data bits, 2
 reg [DMI_REGISTER_WIDTH-1:0] dmi_data_register;
 reg [DMI_REGISTER_WIDTH-1:0] dmi_shift_register;
 reg dmi_save_register;
-reg [9:0] dmi_data_register_addr;
-reg [31:0] dmi_data_register_data;
-reg [1:0] dmi_data_register_op;
+
+reg [9:0] dmi_data_register_addr_reg; // from 44 bit dmi instruction
+assign addr_o = dmi_data_register_addr_reg;
+
+reg [31:0] dmi_data_register_data_reg; // from 44 bit dmi instruction
+assign write_transaction_data_o = dmi_data_register_data_reg;
+
+reg [1:0] dmi_data_register_op_reg; // from 44 bit dmi instruction
 
 // op bits for wishbone writes (outgoing towards the DM)
 localparam OP_OUTGOING_NOP = 0;
@@ -466,43 +472,61 @@ begin
 
                     DMI_INSTRUCTION:
                     begin
+                        // printf
+                        //send_data <= { "DMI_INSTRUCTION    ", 16'h0d0a };
+
                         dmi_data_register <= dmi_shift_register;
 
                         // start a wishbone write or read, depending on the op bits
 
-                        dmi_data_register_addr <= dmi_data_register[43:34];
-                        dmi_data_register_data <= dmi_data_register[33:2];
-                        dmi_data_register_op <= dmi_data_register[1:0];
+                        dmi_data_register_addr_reg <= dmi_data_register[43:34];
+                        dmi_data_register_data_reg <= dmi_data_register[33:2];
+                        dmi_data_register_op_reg <= dmi_data_register[1:0];
 
-                        case (dmi_data_register_op)
+                        case (dmi_data_register_op_reg)
 
                             OP_OUTGOING_NOP: begin
+                                // printf
+                                send_data <= { "OP_OUTGOING_NOP    ", 16'h0d0a };
+
                                 start_read_transaction_o_reg <= 0;
                                 start_write_transaction_o_reg <= 0;
                             end
 
-                            OP_OUTGOING_READ: begin // 01
-                                // perform a write
-                                start_read_transaction_o_reg <= 0; // no read
-                                start_write_transaction_o_reg <= 1; // perform write
+                            OP_OUTGOING_READ: begin
+                                // printf
+                                send_data <= { "OP_OUTGOING_READ   ", 16'h0d0a };
 
-                                write_transaction_data_o_reg <= 8'b01010101; // USB-C Down: from left to right means [ON, OFF, ON, OFF, ON, OFF]
+                                // perform a read
+                                start_read_transaction_o_reg <= 1; // perform read
+                                start_write_transaction_o_reg <= 0; // no write
+
+                                //write_transaction_data_o_reg <= 8'b01010101;
                             end
 
-                            OP_OUTGOING_WRITE: begin // 10
+                            OP_OUTGOING_WRITE: begin
+                                // printf
+                                send_data <= { "OP_OUTGOING_WRITE  ", 16'h0d0a };
+
                                 // perform a write
                                 start_read_transaction_o_reg <= 0; // no read
                                 start_write_transaction_o_reg <= 1; // perform write
 
-                                write_transaction_data_o_reg <= 8'b10101010;
+                                //write_transaction_data_o_reg <= 8'b10101010;
                             end
 
                             OP_OUTGOING_RESERVED: begin
+                                // printf
+                                send_data <= { "OP_OUTGOING_RESERVE", 16'h0d0a };
+
                                 start_read_transaction_o_reg <= 0;
                                 start_write_transaction_o_reg <= 0;
                             end
                             
                             default: begin
+                                // printf
+                                send_data <= { "default            ", 16'h0d0a };
+
                                 start_read_transaction_o_reg <= 0;
                                 start_write_transaction_o_reg <= 0;
                             end
@@ -520,7 +544,7 @@ begin
 
                 next_state <= UPDATE_DR;
 
-                send_data <= { "UPDATE_DR          ", 16'h0d0a };                
+                //send_data <= { "UPDATE_DR          ", 16'h0d0a };                
                 r_led_reg <= ~UPDATE_DR;
             end
 
@@ -576,43 +600,61 @@ begin
 
                     DMI_INSTRUCTION:
                     begin
-                        dmi_data_register = dmi_shift_register;
+                        // printf
+                        //send_data <= { "DMI_INSTRUCTION    ", 16'h0d0a };
+
+                        dmi_data_register <= dmi_shift_register;
 
                         // start a wishbone write or read, depending on the op bits
 
-                        dmi_data_register_addr <= dmi_data_register[43:34];
-                        dmi_data_register_data <= dmi_data_register[33:2];
-                        dmi_data_register_op <= dmi_data_register[1:0];
+                        dmi_data_register_addr_reg <= dmi_data_register[43:34];
+                        dmi_data_register_data_reg <= dmi_data_register[33:2];
+                        dmi_data_register_op_reg <= dmi_data_register[1:0];
 
-                        case (dmi_data_register_op)
+                        case (dmi_data_register_op_reg)
 
                             OP_OUTGOING_NOP: begin
+                                // printf
+                                send_data <= { "OP_OUTGOING_NOP    ", 16'h0d0a };
+
                                 start_read_transaction_o_reg <= 0;
                                 start_write_transaction_o_reg <= 0;
                             end
 
                             OP_OUTGOING_READ: begin
-                                // perform a write
-                                start_read_transaction_o_reg <= 0; // no read
-                                start_write_transaction_o_reg <= 1; // perform write
+                                // printf
+                                send_data <= { "OP_OUTGOING_READ   ", 16'h0d0a };
 
-                                write_transaction_data_o_reg <= 8'b01010101;
+                                // perform a read
+                                start_read_transaction_o_reg <= 1; // perform read
+                                start_write_transaction_o_reg <= 0; // no write
+
+                                //write_transaction_data_o_reg <= 8'b01010101;
                             end
 
                             OP_OUTGOING_WRITE: begin
+                                // printf
+                                send_data <= { "OP_OUTGOING_WRITE  ", 16'h0d0a };
+
                                 // perform a write
                                 start_read_transaction_o_reg <= 0; // no read
                                 start_write_transaction_o_reg <= 1; // perform write
 
-                                write_transaction_data_o_reg <= 8'b10101010;
+                                //write_transaction_data_o_reg <= 8'b10101010;
                             end
 
                             OP_OUTGOING_RESERVED: begin
+                                // printf
+                                send_data <= { "OP_OUTGOING_RESERVE", 16'h0d0a };
+
                                 start_read_transaction_o_reg <= 0;
                                 start_write_transaction_o_reg <= 0;
                             end
                             
                             default: begin
+                                // printf
+                                send_data <= { "default            ", 16'h0d0a };
+
                                 start_read_transaction_o_reg <= 0;
                                 start_write_transaction_o_reg <= 0;
                             end
@@ -630,7 +672,7 @@ begin
 
                 next_state <= UPDATE_DR;
 
-                send_data <= { "UPDATE_DR          ", 16'h0d0a };                
+                //send_data <= { "UPDATE_DR          ", 16'h0d0a };                
                 r_led_reg <= ~UPDATE_DR;
             end
 

@@ -12,6 +12,7 @@ module wishbone_master
     // input wbi custom
     input wire start_read_transaction_i,
     input wire start_write_transaction_i,
+    input wire [31:0] transaction_addr,
     input wire [7:0] write_transaction_data_i, // byte of data that the master uses during write transactions
 
     // output master
@@ -29,8 +30,9 @@ module wishbone_master
 reg we_o_reg = 0;
 assign we_o = we_o_reg;
 
-reg [31:0] addr_reg = 32'h00;
-assign addr_o = addr_reg;
+//reg [31:0] addr_reg = 32'h00;
+//assign addr_o = addr_reg;
+assign addr_o = transaction_addr; // just loop the address through
 
 // determines which byte the master transmits on a write transaction
 //reg [31:0] write_data = 32'h00;

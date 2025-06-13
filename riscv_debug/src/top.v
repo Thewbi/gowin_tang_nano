@@ -32,10 +32,16 @@ module top(
 
 );
 
+//
+// DEFAULT
+//
+//reg [5:0] led_reg = 6'b111111;
+//assign led = led_reg;
+
 
 /**/
 //
-// wishbone
+// wishbone master
 //
 
 wire [31:0] read_data;
@@ -43,12 +49,13 @@ wire [31:0] write_data;
 wire ack;
 wire cyc;
 wire stb;
-wire [31:0] addr;
+wire [31:0] addr; // addr for the master to write to / read from. Retrieved from the JTAG TAP.
 wire we;
 
 wire start_read_transaction; // output by the JTAG tap to cause the withbone master to read the slave
 wire start_write_transaction; // output by the JTAG tap to cause the withbone master to write the slave
 wire[7:0] wishbone_tx_data;
+wire[31:0] wishbone_addr;
 
 wishbone_master wb_master (
 
@@ -63,6 +70,7 @@ wishbone_master wb_master (
     // input wbi custom 
     .start_read_transaction_i(start_read_transaction),
     .start_write_transaction_i(start_write_transaction),
+    .transaction_addr(wishbone_addr),
     .write_transaction_data_i(wishbone_tx_data),
     
     // output master
@@ -76,6 +84,77 @@ wishbone_master wb_master (
     .read_transaction_data_o()
 
 );
+
+//
+// wishbone slaves
+//
+
+wishbone_dm_slave #(
+    .DATA_NUM(DATA_NUM)
+) wb_dm_slave (
+
+    // input
+    .clk_i(sys_clk),
+    .rst_i(~sys_rst_n),
+
+    // input slave
+    .addr_i(addr), // address within a wishbone slave
+    .we_i(we),
+    .data_i(write_data), // the master places the data to write into write_data
+    .cyc_i(cyc),
+    .stb_i(stb),
+
+    // input custom
+
+    // output slave
+    .data_o(read_data), // the TX slave does not use data_o. It does not return any usefull data.
+    .ack_o(ack),
+
+    // output wbi
+    .led_port_o(led), // output to the LEDs port
+
+    //// printf - does not work because it causes a logical cycle, the state machine is not clocked
+    //.send_data(send_data),
+    //.printf(printf)
+
+    // printf - disabled
+    .send_data(),
+    .printf()
+
+);
+
+
+/*
+wishbone_led_slave #(
+    .DATA_NUM(DATA_NUM)
+) wb_led_slave (
+
+    // input
+    .clk_i(sys_clk),
+    .rst_i(~sys_rst_n),
+
+    // input slave
+    .addr_i(addr), // address within a wishbone slave
+    .we_i(we),
+    .data_i(write_data), // the master places the data to write into write_data
+    .cyc_i(cyc),
+    .stb_i(stb),
+
+    // input custom
+
+    // output slave
+    .data_o(read_data), // the TX slave does not use data_o. It does not return any usefull data.
+    .ack_o(ack),
+
+    // output wbi
+    .led_port_o(led) // output to the LEDs port
+
+    // printf - does not work because it causes a logical cycle, the state machine is not clocked
+    //.send_data(send_data),
+    //.printf(printf)
+
+);
+*/
 
 
 
@@ -271,7 +350,7 @@ jtag_tap #(
     .send_data(send_data),
     .printf(printf),
 
-    // printf output disabled
+    //// printf output disabled
     //.send_data(),
     //.printf(),
 
@@ -280,42 +359,11 @@ jtag_tap #(
     // talks to the RISCV DM which is a wishbone slave.
     .start_read_transaction_o(start_read_transaction),
     .start_write_transaction_o(start_write_transaction),
+    .addr_o(wishbone_addr),
     .write_transaction_data_o(wishbone_tx_data)
 
 );
 
-//
-// wishbone
-//
 
-wishbone_led_slave #(
-    .DATA_NUM(DATA_NUM)
-) wb_led_slave (
-
-    // input
-    .clk_i(sys_clk),
-    .rst_i(~sys_rst_n),
-
-    // input slave
-    .addr_i(addr), // address within a wishbone slave
-    .we_i(we),
-    .data_i(write_data), // the master places the data to write into write_data
-    .cyc_i(cyc),
-    .stb_i(stb),
-
-    // input custom
-
-    // output slave
-    .data_o(read_data), // the TX slave does not use data_o. It does not return any usefull data.
-    .ack_o(ack),
-
-    // output wbi
-    .led_port_o(led) // output to the LEDs port
-
-    // printf - does not work because it causes a logical cycle, the state machine is not clocked
-    //.send_data(send_data),
-    //.printf(printf)
-
-);
 
 endmodule

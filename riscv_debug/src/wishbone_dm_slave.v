@@ -1,4 +1,6 @@
-module wishbone_led_slave 
+// DM (RISCV DebugSpec, DM)
+//
+module wishbone_dm_slave 
 #(
     parameter DATA_NUM = 22
 )
@@ -24,19 +26,33 @@ module wishbone_led_slave
                         // ack goes low once the master stops the cycle/strobe
 
     // output - custom output goes here ...
-    output wire [31:0] led_port_o
+    output wire [5:0] led_port_o,
 
     // printf - needs to be enabled in top module by assigning values to these two ports
     // does not work because this state machine is not clocked and this causes a cycle in the tree
-    //output reg [DATA_NUM * 8 - 1:0] send_data, // printf debugging over UART
-    //output reg printf // printf debugging over UART
+    output reg [DATA_NUM * 8 - 1:0] send_data, // printf debugging over UART
+    output reg printf // printf debugging over UART
 
 );
 
-reg [31:0] internal_state_reg = ~6'h00; // all LEDs on
-assign led_port_o = ~internal_state_reg;
+localparam ZERO_VALUE = 32'h00;
 
-reg [31:0] data_o_reg = ~32'h00; // all LEDs on
+//
+// DM (RISCV DebugSpec, DM)
+//
+
+// dm.dmcontrol (0x10) register, page 22
+localparam ADDRESS_DM_CONTROL_REGISTER = 32'h00000010;
+reg [31:0] dmcontrol_reg = ZERO_VALUE;
+
+//
+// WISHBONE
+// 
+
+reg [5:0] led_reg = ~6'h00;
+assign led_port_o = ~led_reg;
+
+reg [31:0] data_o_reg = ZERO_VALUE;
 assign data_o = data_o_reg;
 
 reg ack_o_reg;
@@ -61,7 +77,8 @@ begin
         // go back to IDLE state
         cur_state = IDLE;
 
-        internal_state_reg = 6'b00;
+        dmcontrol_reg = ZERO_VALUE;
+        //led_reg = ~6'b000000; // all LEDs off
     end    
     else 
     begin
@@ -73,7 +90,31 @@ begin
         // register would cause a latch)
         if ((cur_state == WRITE) && (cyc_i == 1 && stb_i == 1))
         begin
-            internal_state_reg = data_i;
+
+            case (addr_i)
+
+                // write dm.dmcontrol (0x11)
+                ADDRESS_DM_CONTROL_REGISTER:
+                begin
+                    // store the written value into the dmcontrol register of this DM
+                    dmcontrol_reg = data_i;
+
+                    led_reg = ~data_i[5:0];
+
+                    // printf
+                    send_data <= { "write              ", 16'h0d0a };
+                    printf <= ~printf;
+                end
+
+                default:
+                begin
+                    // printf
+                    send_data <= { "unknown addr_i     ", 16'h0d0a };
+                    printf <= ~printf;
+                end
+
+            endcase
+
         end
     end
 
@@ -88,7 +129,7 @@ begin
         IDLE:
         begin
             // reset
-            data_o_reg = ~32'b00;
+            data_o_reg = ZERO_VALUE;
             ack_o_reg = 0;
             
             // master starts a transaction
@@ -108,6 +149,8 @@ begin
                 next_state = IDLE;
             end
 
+            //led_reg = ~6'b000001;
+
             //// printf - does not work because this state machine is not clocked
             //send_data <= { "IDLE               ", 16'h0d0a };
             //printf <= ~printf;
@@ -119,19 +162,35 @@ begin
             // [STB_O] and [CYC_O] to indicate the end of the cycle.
             if (cyc_i == 1 || stb_i == 1)
             begin
-                // present the read data
-                data_o_reg = internal_state_reg;
+                
+                case (addr_i)
+
+                    ADDRESS_DM_CONTROL_REGISTER:
+                    begin
+                        // present the read data
+                        data_o_reg = dmcontrol_reg;
+                    end
+
+                    default:
+                    begin
+                        data_o_reg = ZERO_VALUE;
+                    end
+
+                endcase
+
                 ack_o_reg = 1;
 
                 next_state = cur_state;
             end
             else
             begin
-                data_o_reg = ~32'b00; // output a dummy value
+                data_o_reg = ZERO_VALUE; // output a dummy value
                 ack_o_reg = 0;
 
                 next_state = IDLE;
             end
+
+            //led_reg = ~6'b000010;
 
             //// printf - does not work because this state machine is not clocked
             //send_data <= { "READ               ", 16'h0d0a };
@@ -140,22 +199,44 @@ begin
 
         WRITE:
         begin
-            data_o_reg = ~32'b00;
+            //data_o_reg = ZERO_VALUE;
 
             // The slave will keep ACK_I asserted until the master negates 
             // [STB_O] and [CYC_O] to indicate the end of the cycle.
+            //
+            // HINT: the actual write is performed in the next state logic as it is clocked
             if (cyc_i == 1 || stb_i == 1)
             begin
+
+                case (addr_i)
+
+                    ADDRESS_DM_CONTROL_REGISTER:
+                    begin
+                        // present the read data (this is basically a read operation!)
+                        data_o_reg = dmcontrol_reg;
+                    end
+
+                    default:
+                    begin
+                        data_o_reg = ZERO_VALUE;
+                    end
+
+                endcase
+
                 ack_o_reg = 1;
 
                 next_state = cur_state;
             end
             else
             begin
+                data_o_reg = ZERO_VALUE;
+
                 ack_o_reg = 0;
 
                 next_state = IDLE;
             end
+
+            //led_reg = ~6'b000011;
 
             //// printf - does not work because this state machine is not clocked
             //send_data <= { "WRITE              ", 16'h0d0a };
@@ -168,6 +249,8 @@ begin
             ack_o_reg = 0;
 
             next_state = cur_state;
+
+            //led_reg = ~6'b000100;
 
             //// printf - does not work because this state machine is not clocked
             //send_data <= { "default             ", 16'h0d0a };
