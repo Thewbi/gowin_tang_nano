@@ -4,22 +4,72 @@ module jtag_tap
 )
 (
 
-    // input
+    //
+    // JTAG
+    //
+
+    // input - tag
     input wire clk,                // clock input
 	input wire rst_n,              // asynchronous reset input, low active
     input wire jtag_clk,
     input wire jtag_tdi,
     input wire jtag_tms,
 
-    // output
-    output wire         jtag_tdo,
+    // output - jtag
+    output wire jtag_tdo,
 
-    // output - debug
-    output reg [5:0]   r_led_reg, // Tang Nano has 6 LEDs
+    // output - jtag - debug
+    output reg [5:0] r_led_reg, // Tang Nano has 6 LEDs
     output reg [DATA_NUM * 8 - 1:0] send_data, // printf debugging over UART
-    output reg printf // printf debugging over UART
+    output reg printf, // printf debugging over UART
+
+    //
+    // Wishbone
+    //
+
+    output wire start_read_transaction_o,
+    output wire start_write_transaction_o,
+    output wire [7:0] write_transaction_data_o // byte of data that the master uses during write transactions
+    
+
+    // output wbi custom
+    //wire [31:0] read_transaction_data_o;
+
+/*
+    // input - wishbone
+    input wire clk_i, // clock input
+	input wire rst_i, // asynchronous reset input, low active
+
+    // input master
+    input wire [31:0] data_i,
+    input wire ack_i,    
+
+    // output master
+    output wire [31:0] addr_o,
+    output wire we_o,
+    output wire [31:0] data_o,
+    output reg cyc_o,
+    output reg stb_o
+*/
 
 );
+
+//
+// Wishbone
+//
+
+// input wbi custom
+reg start_read_transaction_o_reg;
+assign start_read_transaction_o = start_read_transaction_o_reg;
+
+reg start_write_transaction_o_reg;
+assign start_write_transaction_o = start_write_transaction_o_reg;
+
+reg [7:0] write_transaction_data_o_reg; // byte of data that the master uses during write transactions
+assign write_transaction_data_o = write_transaction_data_o_reg;
+
+// output wbi custom
+//wire [31:0] read_transaction_data_o;
 
 //
 // JTAG registers
@@ -46,20 +96,21 @@ localparam DMI_REGISTER_WIDTH = 10 + 32 + 2; // 10 address bits, 32 data bits, 2
 reg [DMI_REGISTER_WIDTH-1:0] dmi_data_register;
 reg [DMI_REGISTER_WIDTH-1:0] dmi_shift_register;
 reg dmi_save_register;
+reg [9:0] dmi_data_register_addr;
+reg [31:0] dmi_data_register_data;
+reg [1:0] dmi_data_register_op;
 
 // op bits for wishbone writes (outgoing towards the DM)
-localparam op_outgoing_nop = 0;
-localparam op_outgoing_read = 1;
-localparam op_outgoing_write = 2;
-localparam op_outgoing_reserved = 3;
+localparam OP_OUTGOING_NOP = 0;
+localparam OP_OUTGOING_READ = 1;
+localparam OP_OUTGOING_WRITE = 2;
+localparam OP_OUTGOING_RESERVED = 3;
 
 // op bits for wishbone reads (incoming towards the DTM/TAP)
-localparam op_incoming_success = 0;
-localparam op_incoming_reserved = 1;
-localparam op_incoming_failed = 2;
-localparam op_incoming_busy = 3;
-
-
+localparam OP_INCOMING_SUCCESS = 0;
+localparam OP_INCOMING_RESERVED = 1;
+localparam OP_INCOMING_FAILED = 2;
+localparam OP_INCOMING_BUSY = 3;
 
 reg [31:0] dr_custom_register_1 = 32'h0A0B0C0D;
 
@@ -112,6 +163,10 @@ localparam CUSTOM_REGISTER_1_INSTRUCTION = 32'h0A0B0C0D;
 // current and next_state
 reg [4:0] cur_state = TEST_LOGIC_RESET;
 reg [4:0] next_state;
+
+
+//Next steps: Insert wishbone master and slave.
+//Read and write the 44 bit dmi register 0x11 over wishbone.
 
 // next state logic
 always @(posedge clk) 
@@ -227,6 +282,11 @@ begin
         // State Id: 2
         SELECT_DR_SCAN:  
         begin
+
+            // disable all wishbone transactions
+            start_read_transaction_o_reg = 0; // no read
+            start_write_transaction_o_reg = 0; // perform write
+
             if (jtag_tms == 1'b0) 
             begin
                 // on enter: CAPTURE_DR
@@ -424,6 +484,48 @@ begin
                     DMI_INSTRUCTION:
                     begin
                         dmi_data_register <= dmi_shift_register;
+
+                        // start a wishbone write or read, depending on the op bits
+
+                        dmi_data_register_addr <= dmi_data_register[43:34];
+                        dmi_data_register_data <= dmi_data_register[33:2];
+                        dmi_data_register_op <= dmi_data_register[1:0];
+
+                        case (dmi_data_register_op)
+
+                            OP_OUTGOING_NOP: begin
+                                start_read_transaction_o_reg <= 0;
+                                start_write_transaction_o_reg <= 0;
+                            end
+
+                            OP_OUTGOING_READ: begin // 01
+                                // perform a write
+                                start_read_transaction_o_reg <= 0; // no read
+                                start_write_transaction_o_reg <= 1; // perform write
+
+                                write_transaction_data_o_reg <= 8'b01010101; // USB-C Down: from left to right means [ON, OFF, ON, OFF, ON, OFF]
+                            end
+
+                            OP_OUTGOING_WRITE: begin // 10
+                                // perform a write
+                                start_read_transaction_o_reg <= 0; // no read
+                                start_write_transaction_o_reg <= 1; // perform write
+
+                                write_transaction_data_o_reg <= 8'b10101010;
+                            end
+
+                            OP_OUTGOING_RESERVED: begin
+                                start_read_transaction_o_reg <= 0;
+                                start_write_transaction_o_reg <= 0;
+                            end
+                            
+                            default: begin
+                                start_read_transaction_o_reg <= 0;
+                                start_write_transaction_o_reg <= 0;
+                            end
+
+                        endcase
+
                     end
 
                     CUSTOM_REGISTER_1_INSTRUCTION:
@@ -473,12 +575,13 @@ begin
             end
             else
             begin
+
                 // on enter: UPDATE_DR from EXIT2_DR
                 case (ir_data_register)
                 
                     IDCODE_INSTRUCTION:
                     begin
-                        id_code_register <= dr_shift_register;
+                        id_code_register <= dr_shift_register;                        
                     end
 
                     BYPASS_INSTRUCTION:
@@ -488,7 +591,49 @@ begin
 
                     DMI_INSTRUCTION:
                     begin
-                        dmi_data_register <= dmi_shift_register;
+                        dmi_data_register = dmi_shift_register;
+
+                        // start a wishbone write or read, depending on the op bits
+
+                        dmi_data_register_addr <= dmi_data_register[43:34];
+                        dmi_data_register_data <= dmi_data_register[33:2];
+                        dmi_data_register_op <= dmi_data_register[1:0];
+
+                        case (dmi_data_register_op)
+
+                            OP_OUTGOING_NOP: begin
+                                start_read_transaction_o_reg <= 0;
+                                start_write_transaction_o_reg <= 0;
+                            end
+
+                            OP_OUTGOING_READ: begin
+                                // perform a write
+                                start_read_transaction_o_reg <= 0; // no read
+                                start_write_transaction_o_reg <= 1; // perform write
+
+                                write_transaction_data_o_reg <= 8'b01010101;
+                            end
+
+                            OP_OUTGOING_WRITE: begin
+                                // perform a write
+                                start_read_transaction_o_reg <= 0; // no read
+                                start_write_transaction_o_reg <= 1; // perform write
+
+                                write_transaction_data_o_reg <= 8'b10101010;
+                            end
+
+                            OP_OUTGOING_RESERVED: begin
+                                start_read_transaction_o_reg <= 0;
+                                start_write_transaction_o_reg <= 0;
+                            end
+                            
+                            default: begin
+                                start_read_transaction_o_reg <= 0;
+                                start_write_transaction_o_reg <= 0;
+                            end
+
+                        endcase
+
                     end
 
                     CUSTOM_REGISTER_1_INSTRUCTION:

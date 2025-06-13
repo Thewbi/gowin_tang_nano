@@ -32,6 +32,104 @@ module top(
 
 );
 
+
+/**/
+//
+// wishbone
+//
+
+wire [31:0] read_data;
+wire [31:0] write_data;
+wire ack;
+wire cyc;
+wire stb;
+wire [31:0] addr;
+wire we;
+
+wire start_read_transaction; // output by the JTAG tap to cause the withbone master to read the slave
+wire start_write_transaction; // output by the JTAG tap to cause the withbone master to write the slave
+wire[7:0] wishbone_tx_data;
+
+wishbone_master wb_master (
+
+    // input
+    .clk_i(sys_clk),
+    .rst_i(~sys_rst_n),
+
+    // input master
+    .data_i(read_data),
+    .ack_i(ack),
+
+    // input wbi custom 
+    .start_read_transaction_i(start_read_transaction),
+    .start_write_transaction_i(start_write_transaction),
+    .write_transaction_data_i(wishbone_tx_data),
+    
+    // output master
+    .addr_o(addr),
+    .we_o(we),
+    .data_o(write_data), // output to the slave on write transactions
+    .cyc_o(cyc),
+    .stb_o(stb),
+
+    // output wbi custom
+    .read_transaction_data_o()
+
+);
+
+
+
+//
+// Timer - perform action every second
+//
+
+parameter BAUD_RATE = 115200; // serial baud rate, 115200 bits per second
+parameter CLK_FRE_MHZ = CLK_FRE * 1000000;
+parameter CYCLES_PER_BIT = CLK_FRE_MHZ / BAUD_RATE; // CLOCK TICKS per bit
+
+/*
+reg [31:0] counter;
+reg [7:0] tx_counter;
+
+always @(posedge sys_clk)
+begin
+    counter = counter + 1;
+
+    if (counter == CLK_FRE_MHZ)
+    begin
+
+        counter = 32'd0;
+
+        // perform action every second
+
+// Enable this snippet for the wishbone RX slave
+//        // start/stop a wishbone read transaction
+//        start_read_transaction <= ~start_read_transaction;
+//
+
+//        // start the wishbone write transaction
+//        start_write_transaction = 1;
+//        tx_data = tx_data + 1;
+
+//        // transmit data over the raw UART TX (without wishbone)
+//        tx_data_valid = ~tx_data_valid;
+//        tx_data = 8'h01;
+
+    end
+
+//    // ENABLE this for UART TX write
+//    if (counter >= (CYCLES_PER_BIT * 8))
+//    begin
+//        // stop the wishbone write transaction
+//        start_write_transaction = 0;
+//    end
+
+end
+*/
+
+
+
+
 //
 // UART demo application
 //
@@ -39,31 +137,6 @@ module top(
 //
 // combinational logic for UART
 //
-
-/*
-// `define example_1
-
-`ifdef example_1
-
-// Example 1
-
-parameter 	ENG_NUM  = 14; // 非中文字符数
-parameter 	CHE_NUM  = 2 + 1; //  中文字符数
-parameter 	DATA_NUM = CHE_NUM * 3 + ENG_NUM; // 中文字符使用UTF8，占用3个字节
-reg [DATA_NUM * 8 - 1:0] send_data = { "你好 Tang Nano 20K", 16'h0d0a };
-
-`else
-
-// Example 2 - 20 englisch and 0 chinese characters in the string
-
-parameter 	ENG_NUM  = 19 + 1; // 非中文字符数
-parameter 	CHE_NUM  = 0; // 中文字符数
-parameter 	DATA_NUM = CHE_NUM * 3 + ENG_NUM + 1; // 中文字符使用UTF8，占用3个字节
-
-reg [DATA_NUM * 8 - 1:0] send_data = { "Hello Tang Nano 20K", 16'h0d0a }; // append CR LF by concatenation
-
-`endif
-*/
 
 parameter DATA_NUM = 22;
 wire [DATA_NUM * 8 - 1:0] send_data;
@@ -75,8 +148,6 @@ reg[7:0]                        tx_str;
 
 wire[7:0]                       tx_data;
 wire[7:0]                       tx_cnt;
-
-
 
 wire                            tx_data_ready; // output of the tx module. Asserted when transmission has been performed
 wire[7:0]                       rx_data;
@@ -175,24 +246,106 @@ begin
     r_led_reg <= leds;
 end
 
+//
+// For wishbone
+//
+/*
+wire [31:0] read_data; // read data connection between master and slave, output from the slave, input for the master
+wire ack; // output from the slave, input for the master
+//reg start_read_transaction = 0;
+//reg start_write_transaction = 0;
+//reg[7:0] tx_data = 0;
+
+wire [31:0] addr; // output from the master, input for the slave
+wire we; // write enable, output from the mster, input for the slave
+wire [31:0] write_data; // write data connection between master and slave, output from the master, input for the slave
+wire cyc; // output from the master, input for the slave
+wire stb; // output from the master, input for the slave
+*/
 jtag_tap #(
     .DATA_NUM(DATA_NUM)
 ) jtag_tap_inst (
 
+    //
+    // JTAG
+    //
+
     // input
-    sys_clk,
-    sys_rst_n,
-    jtag_clk,
-    jtag_tdi,
-    jtag_tms,
+    .clk(sys_clk),
+    .rst_n(sys_rst_n),
+    .jtag_clk(jtag_clk),
+    .jtag_tdi(jtag_tdi),
+    .jtag_tms(jtag_tms),
     
     // output    
-    jtag_tdo,
+    .jtag_tdo(jtag_tdo),
 
     // debug output
-    leds,
-    send_data,
-    printf
+    .r_led_reg(leds),
+    .send_data(send_data),
+    .printf(printf),
+
+    //
+    // Wishbone
+    //
+
+/*
+    // input
+    .clk_i(sys_clk),
+    .rst_i(~sys_rst_n),
+
+    // input from slave
+    .data_i(read_data), // data that the slave outputs and the master reads as input from the slave
+    .ack_i(ack),
+
+    // input wbi custom 
+    //.start_read_transaction_i(start_read_transaction),
+    //.start_write_transaction_i(start_write_transaction),
+    //.write_transaction_data_i(tx_data),
+    
+    // output master
+    .addr_o(addr), // address within a wishbone slave, connected to the addr_i of the slave
+    .we_o(we),
+    .data_o(write_data), // output to the slave during write transactions (the master loops write_transaction_data_i through here!)
+    .cyc_o(cyc),
+    .stb_o(stb)
+
+    // output wbi custom
+    //.read_transaction_data_o(led)
+    //.read_transaction_data_o() // not connected
+*/
+
+    .start_read_transaction_o(start_read_transaction),
+    .start_write_transaction_o(start_write_transaction),
+    .write_transaction_data_o(wishbone_tx_data)
+
+);
+
+//
+// wishbone
+//
+
+wishbone_led_slave wb_led_slave (
+
+    // input
+    .clk_i(sys_clk),
+    .rst_i(~sys_rst_n),
+
+    // input slave
+    .addr_i(addr), // address within a wishbone slave
+    .we_i(we),
+    .data_i(write_data), // the master places the data to write into write_data
+    .cyc_i(cyc),
+    .stb_i(stb),
+
+    // input custom
+
+    // output slave
+    .data_o(read_data), // the TX slave does not use data_o. It does not return any usefull data.
+    .ack_o(ack),
+
+    // output wbi
+    .led_port_o(led) // output to the LEDs port
 
 );
 
