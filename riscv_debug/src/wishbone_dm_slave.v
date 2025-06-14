@@ -2,7 +2,7 @@
 //
 module wishbone_dm_slave 
 #(
-    parameter DATA_NUM = 22
+    parameter DATA_NUM = 16
 )
 (
 
@@ -96,21 +96,29 @@ begin
                 //// printf
                 //send_data = { "HALTREQ            ", 16'h0d0a };
                 //printf = ~printf;
+
+                send_data = { 8'h00 };
             end
             else if (dmcontrol_reg_old[RESUMEREQ] == 1'b1)
             begin
                 //// printf
                 //send_data = { "RESUMEREQ          ", 16'h0d0a };
                 //printf = ~printf;
+
+                send_data = { 8'h01 };
             end
             else if (dmcontrol_reg_old[HARTRESET] == 1'b1)
             begin
                 //// printf
                 //send_data = { "HARTRESET          ", 16'h0d0a };
                 //printf = ~printf;
+            
+                send_data = { 8'h02 };
             end
 
             //dmcontrol_reg_old = ZERO_VALUE;
+
+            printf = ~printf;
             
         end
     end
@@ -152,15 +160,15 @@ begin
                     //led_reg = ~data_i[5:0];
 
                     // printf
-                    send_data <= { "DM_CONTROL         ", 16'h0d0a };
-                    printf <= ~printf;
+                    //send_data <= { "DM_CONTROL         ", 16'h0d0a };
+                    //printf <= ~printf;
                 end
 
                 default:
                 begin
                     // printf
-                    send_data <= { "unknown addr_i     ", 16'h0d0a };
-                    printf <= ~printf;
+                    //send_data <= { "unknown addr_i     ", 16'h0d0a };
+                    //printf <= ~printf;
                 end
 
             endcase

@@ -32,6 +32,21 @@ module top(
 
 );
 
+
+
+//reg  r_Switch_1 = 1'b0;
+wire w_Switch_1;
+
+// Instantiate Debounce Module
+Debounce_Switch debounce_jtag_clk
+(
+    .i_Clk(sys_clk), 
+    .i_Switch(jtag_clk),
+    .o_Switch(w_Switch_1)
+);
+
+
+
 //
 // DEFAULT
 //
@@ -42,8 +57,8 @@ module top(
 // printf
 //
 
-parameter DATA_NUM = 22;
-wire [DATA_NUM * 8 - 1:0] send_data;
+parameter DATA_NUM = 1;
+wire [DATA_NUM * 8 - 1:0] send_data; // bits to send
 // DEBUG control the uart tx
 //reg printf = 1'b0;
 wire printf;
@@ -122,19 +137,20 @@ wishbone_dm_slave #(
     .ack_o(ack),
 
     // output wbi
-    .led_port_o(led), // output to the LEDs port
-
-    /**/
-    // printf 
-    .send_data(send_data),
-    .printf(printf)
-
+    //.led_port_o(led), // output to the LEDs port
+    .led_port_o(),
 
     /*
+    // printf - enabled
+    .send_data(send_data),
+    .printf(printf)
+    */
+
+    /**/
     // printf - disabled
     .send_data(),
     .printf()
-    */
+    
 
 );
 
@@ -329,6 +345,7 @@ Debounce_Switch debounce_Inst
 // JTAG example
 //
 
+/*
 reg r_LED_1 = 1'b0;
 wire [5:0] leds;
 reg [5:0] r_led_reg = 6'b111111;
@@ -337,6 +354,7 @@ always @(leds)
 begin
     r_led_reg <= leds;
 end
+*/
 
 jtag_tap #(
     .DATA_NUM(DATA_NUM)
@@ -350,6 +368,7 @@ jtag_tap #(
     .clk(sys_clk),
     .rst_n(sys_rst_n),
     .jtag_clk(jtag_clk),
+    //.jtag_clk(w_Switch_1),
     .jtag_tdi(jtag_tdi),
     .jtag_tms(jtag_tms),
     
@@ -357,18 +376,20 @@ jtag_tap #(
     .jtag_tdo(jtag_tdo),
 
     // debug output
-    .r_led_reg(leds),
+    //.r_led_reg(leds),
+    .led_o(led),
 
-    /*
+    /**/
     // printf - enabled
     .send_data(send_data),
     .printf(printf),
-    */
+    
 
-    /**/
+    /*
     // printf - disabled
     .send_data(),
     .printf(),
+*/
 
     // when a JTAG command for dmi (0x11) arrives, the JTAG_TAP will
     // output commands to the wishbone master here. The wishbone master
