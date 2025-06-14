@@ -20,7 +20,7 @@ module top(
     input wire sys_clk,         // clk input
     input wire sys_rst_n,       // reset input button  (active low)
 	input wire uart_rx,         // UART RX
-    input wire btn1_n,          // push button 1 (active low)
+//    input wire btn1_n,          // push button 1 (active low)
     input wire jtag_clk,
     input wire jtag_tdi,
     input wire jtag_tms,
@@ -38,14 +38,24 @@ module top(
 //reg [5:0] led_reg = 6'b111111;
 //assign led = led_reg;
 
+//
+// printf
+//
+
+parameter DATA_NUM = 22;
+wire [DATA_NUM * 8 - 1:0] send_data;
+// DEBUG control the uart tx
+//reg printf = 1'b0;
+wire printf;
+
 
 /**/
 //
 // wishbone master
 //
 
-wire [31:0] read_data;
-wire [31:0] write_data;
+wire [63:0] read_data;
+wire [63:0] write_data;
 wire ack;
 wire cyc;
 wire stb;
@@ -54,7 +64,7 @@ wire we;
 
 wire start_read_transaction; // output by the JTAG tap to cause the withbone master to read the slave
 wire start_write_transaction; // output by the JTAG tap to cause the withbone master to write the slave
-wire[7:0] wishbone_tx_data;
+wire[63:0] wishbone_tx_data;
 wire[31:0] wishbone_addr;
 
 wishbone_master wb_master (
@@ -89,6 +99,7 @@ wishbone_master wb_master (
 // wishbone slaves
 //
 
+// DM (RISCV Debug Spec)
 wishbone_dm_slave #(
     .DATA_NUM(DATA_NUM)
 ) wb_dm_slave (
@@ -113,13 +124,17 @@ wishbone_dm_slave #(
     // output wbi
     .led_port_o(led), // output to the LEDs port
 
-    //// printf - does not work because it causes a logical cycle, the state machine is not clocked
-    //.send_data(send_data),
-    //.printf(printf)
+    /**/
+    // printf 
+    .send_data(send_data),
+    .printf(printf)
 
+
+    /*
     // printf - disabled
     .send_data(),
     .printf()
+    */
 
 );
 
@@ -217,11 +232,7 @@ end
 // combinational logic for UART
 //
 
-parameter DATA_NUM = 22;
-wire [DATA_NUM * 8 - 1:0] send_data;
-// DEBUG control the uart tx
-//reg printf = 1'b0;
-wire printf;
+
 
 reg[7:0]                        tx_str;
 
@@ -230,7 +241,8 @@ wire[7:0]                       tx_cnt;
 
 wire                            tx_data_ready; // output of the tx module. Asserted when transmission has been performed
 wire[7:0]                       rx_data;
-reg                             rx_data_ready = 1'b1; // receiving data is always enabled
+//reg                             rx_data_ready = 1'b1; // receiving data is always enabled
+localparam RX_DATA_READY = 1'b1;
 wire                            tx_data_valid;
 
 uart_controller 
@@ -270,7 +282,7 @@ uart_rx
     // input
 	.clk                        (sys_clk),
 	.rst_n                      (sys_rst_n),	
-	.rx_data_ready              (rx_data_ready),
+	.rx_data_ready              (RX_DATA_READY),
 	.rx_pin                     (uart_rx),
 
     // output
@@ -294,6 +306,7 @@ uart_tx
 	.tx_pin                     (uart_tx)
 );
 
+/*
 //
 // user button demo application
 //
@@ -310,7 +323,7 @@ Debounce_Switch debounce_Inst
     .i_Switch(btn1_n),
     .o_Switch(w_Switch_1)
 );
-
+*/
 
 //
 // JTAG example
@@ -346,13 +359,16 @@ jtag_tap #(
     // debug output
     .r_led_reg(leds),
 
-    // printf output enabled
+    /*
+    // printf - enabled
     .send_data(send_data),
     .printf(printf),
+    */
 
-    //// printf output disabled
-    //.send_data(),
-    //.printf(),
+    /**/
+    // printf - disabled
+    .send_data(),
+    .printf(),
 
     // when a JTAG command for dmi (0x11) arrives, the JTAG_TAP will
     // output commands to the wishbone master here. The wishbone master

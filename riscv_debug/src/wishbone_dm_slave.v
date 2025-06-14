@@ -13,14 +13,14 @@ module wishbone_dm_slave
     // input (slaves)
     input wire [31:0] addr_i, // address within a wishbone slave
     input wire we_i, // write enable, 1 = write, 0 = read
-    input wire [31:0] data_i, // data for the slave consumes
+    input wire [63:0] data_i, // data for the slave consumes
     input wire cyc_i, // master starts and terminates cycle
     input wire stb_i, // master starts and terminates strobes
 
     // input - custom input goes here ...
 
     // output (slaves)
-    output wire [31:0] data_o, // data that the slave produces
+    output wire [63:0] data_o, // data that the slave produces
     output wire ack_o,  // ack is deasserted until the master starts a cycle/strobe
                         // ack has to be asserted as long as the master asserts cyc_i and stb_i
                         // ack goes low once the master stops the cycle/strobe
@@ -43,7 +43,12 @@ localparam ZERO_VALUE = 32'h00;
 
 // dm.dmcontrol (0x10) register, page 22
 localparam ADDRESS_DM_CONTROL_REGISTER = 32'h00000010;
-reg [31:0] dmcontrol_reg = ZERO_VALUE;
+reg [63:0] dmcontrol_reg = ZERO_VALUE;
+reg [63:0] dmcontrol_reg_old = ZERO_VALUE;
+
+localparam HALTREQ = 31;
+localparam RESUMEREQ = 30;
+localparam HARTRESET = 29;
 
 //
 // WISHBONE
@@ -52,7 +57,7 @@ reg [31:0] dmcontrol_reg = ZERO_VALUE;
 reg [5:0] led_reg = ~6'h00;
 assign led_port_o = ~led_reg;
 
-reg [31:0] data_o_reg = ZERO_VALUE;
+reg [63:0] data_o_reg = ZERO_VALUE;
 assign data_o = data_o_reg;
 
 reg ack_o_reg;
@@ -67,6 +72,50 @@ localparam WRITE = 2;
 reg [1:0] cur_state = IDLE;
 reg [1:0] next_state;
 
+always @(posedge clk_i)
+begin
+
+    if (rst_i) 
+    begin    
+        dmcontrol_reg_old = ZERO_VALUE;
+    end
+    else
+    begin
+
+        if (dmcontrol_reg_old != dmcontrol_reg)
+        begin
+
+            //// printf
+            //send_data <= { "CHANGE             ", 16'h0d0a };
+            //printf <= ~printf;
+
+            dmcontrol_reg_old = dmcontrol_reg;
+
+            if (dmcontrol_reg_old[HALTREQ] == 1'b1)
+            begin
+                //// printf
+                //send_data = { "HALTREQ            ", 16'h0d0a };
+                //printf = ~printf;
+            end
+            else if (dmcontrol_reg_old[RESUMEREQ] == 1'b1)
+            begin
+                //// printf
+                //send_data = { "RESUMEREQ          ", 16'h0d0a };
+                //printf = ~printf;
+            end
+            else if (dmcontrol_reg_old[HARTRESET] == 1'b1)
+            begin
+                //// printf
+                //send_data = { "HARTRESET          ", 16'h0d0a };
+                //printf = ~printf;
+            end
+
+            //dmcontrol_reg_old = ZERO_VALUE;
+            
+        end
+    end
+end
+
 // next state logic
 always @(posedge clk_i) 
 begin
@@ -78,6 +127,7 @@ begin
         cur_state = IDLE;
 
         dmcontrol_reg = ZERO_VALUE;
+        
         //led_reg = ~6'b000000; // all LEDs off
     end    
     else 
@@ -99,10 +149,10 @@ begin
                     // store the written value into the dmcontrol register of this DM
                     dmcontrol_reg = data_i;
 
-                    led_reg = ~data_i[5:0];
+                    //led_reg = ~data_i[5:0];
 
                     // printf
-                    send_data <= { "write              ", 16'h0d0a };
+                    send_data <= { "DM_CONTROL         ", 16'h0d0a };
                     printf <= ~printf;
                 end
 

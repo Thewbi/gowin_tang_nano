@@ -6,24 +6,24 @@ module wishbone_master
 	input wire rst_i, // asynchronous reset input, low active
 
     // input master
-    input wire [31:0] data_i,
+    input wire [63:0] data_i,
     input wire ack_i,
 
     // input wbi custom
     input wire start_read_transaction_i,
     input wire start_write_transaction_i,
     input wire [31:0] transaction_addr,
-    input wire [7:0] write_transaction_data_i, // byte of data that the master uses during write transactions
+    input wire [63:0] write_transaction_data_i, // byte of data that the master uses during write transactions
 
     // output master
     output wire [31:0] addr_o,
     output wire we_o,
-    output wire [31:0] data_o,
+    output wire [63:0] data_o,
     output reg cyc_o,
     output reg stb_o,
 
     // output wbi custom
-    output wire [31:0] read_transaction_data_o
+    output wire [63:0] read_transaction_data_o
 
 );
 
@@ -39,7 +39,7 @@ assign addr_o = transaction_addr; // just loop the address through
 //assign data_o = write_data;
 assign data_o = write_transaction_data_i;
 
-reg [31:0] read_transaction_data_o_reg;
+reg [63:0] read_transaction_data_o_reg;
 assign read_transaction_data_o = read_transaction_data_o_reg;
 
 localparam IDLE = 0;
@@ -108,7 +108,7 @@ begin
             cyc_o = 1;
             stb_o = 1;
 
-            // read means write enable is deasserted
+            // in order to read, deasserted write enable
             we_o_reg = 0;
 
             if (ack_i == 1)

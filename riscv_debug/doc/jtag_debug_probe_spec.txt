@@ -1,0 +1,229 @@
+# Serial UART Interface to the Debug Probe
+
+A windows computer cannot directly send 3v3 signals to an FPGA.
+Therefore, there needs to be a debug probe in between a PC and the FPGA.
+The debug probe usually has a USB connection to the PC which is used 
+to run a virtual COM port / serial port, meaning a UART on the debug probe 
+is wrapped in and transferred over USB and the USB device appears as a COM 
+port on Microsoft Windows or as a serial port on Linux.
+Then on Microsoft Windows software can open a connection to the COM port
+and read and write to the UART of the debug probe. The debug probe will then
+transfer the data to the UART on the FPGA.
+
+As a debug probe, we use an Arduino DUE with a sketch that receives
+commands from a Serial-connection and executes the commands on the FPGA
+but pulling pins high and low as required in order to send JTAG commands
+over those pins. On the FPGA, the JTAG TAP receives those commands.
+
+The commands exchanged between the PC and the Arduino are part of the 
+"Debug Probe Specification" as defined in this document.
+
+# Connection
+
+UART 8N1, baud-rate = 9600 (subject to change, if higher speed is required, choose higher speed and update Arduino sketch!)
+
+# Message Format
+
+Looking at an ASCII table, you will see the codes 0x02 and 0x03.
+They are Start of Text (STX) and End of Text (ETX).
+These two characters are used to wrap a message so that the receiver
+can tell when it has fully received a complete command.
+
+Incomplete messages can be detected, when a second STX arrives before
+the current message has been terminated by ETX!
+
+The receiver maintains an input buffer of 32 bytes! If that buffer is
+full before seeing an ETX, the buffer is completely erased and the 
+receiver goes back to waiting for an STX! The receiver will send
+0xFF 0xFE 0xFD 0xFC in that case as an error code! 
+The sender has to accomodate for that situation!
+
+# Receiving Messages
+
+1. Receive data stream and split by STX, ETX
+1. Remove STX, ETX for an individually received message from the stream
+1. Decode: 0x0A 0x82 => 0x02, 0x0A 0x83 => 03, 0x0A 0x8A => 0x0A
+1. Parse command (0x00 = ping, 0x01 = send_tms, 0x02 = shift_data) 
+1. Pass bytes to handler for that command
+1. Handler parses parameters and executes the command
+1. Handler sends response
+
+# Sending Messages
+
+0. wait for response, before sending next message. (Initially send a command without waiting for a response)
+1. Produce command bytes or produce return value bytes
+2. Encode: 0x02 => 0x0A 0x82, 0x03 => 0x0A 0x83, 0x0A => 0x0A 0x8A
+3. Wrap in STX, ETX
+4. Transmit
+
+02 - STX
+01 - CMD { 0x01 = send_tms, 0x02 = shift_data }
+03 - ETX
+
+
+# ping (0x00)
+
+A hello world message to check if the receiver is functional
+
+0x02 0x00 0x03
+
+Just the command 0x00 which is a ping.
+
+The receiver will answer with a pong (0x50 ASCII P as in (P)ong).
+
+0x02 0x00 0x03
+
+Example: 
+Request: \h(02 00 03)
+
+
+
+
+
+# send_tms (0x01)
+
+param 0 - number_bits_to_execute - number of bits to execute (max 32) (uint32_t)
+param 1 - bits_to_execute - the bits to put onto tms (max 32) (uint32_t)
+
+returns - 0x00 on success (uint32_t)
+
+
+Example: 
+Request: 
+You want to trigger:
+
+```
+send_tms(5, 0b11111, 1000);
+```
+
+Therefore send: 
+
+```
+\h(02 01 00 00 00 05 00 00 00 1F 03)
+```
+
+
+
+
+# shift_data (0x02)
+
+number of bits to shift (max 32)
+param 0 - number_bits_to_shift - number of bits to shift (max 32) (uint32_t)
+param 1 - in_data - data to shift in (uint32_t)
+param 2 - tms - tms value to use while shifting (uint8_t, should be 0 or 1 only!)
+
+returns:
+uin32_t of out-shited bits
+
+Example: 
+Request: 
+You want to trigger: 
+
+```
+in_data_len = 31;
+in_data = 0x00000011;
+read_data = 0x00; 
+shift_data(in_data_len, &in_data, &read_data, tms_zero, 10); 
+```
+
+Therefore send: 
+
+```
+\h(02 0A 82 00 00 00 1F 00 00 00 11 00 03)
+```
+
+Example:
+Request:
+You want to trigger:
+
+```
+in_data = 0x00000056;
+read_data = 0x00;
+shift_data(32, &in_data, &read_data, tms_zero, 10);
+```
+
+Therefore send: \h(02 0A 82 20 00 00 00 56 03)
+
+
+
+# Undefined command
+
+If the receiver receives an undefined command, it responds with 0xFD 0xFD 0xFE 0xFF 
+
+Example:
+
+```
+\h(02 40 03)
+```
+
+
+# Test-Script
+
+// ping (return is pong (0x50))
+\h(02 00 03)
+
+// reset to TEST_LOGIC_RESET (wait a couple of seconds, device will return 0x00 (RESULT_OK)
+// send_tms(5, 0b11111, 1000);
+\h(02 01 00 00 00 05 00 00 00 1F 03)
+
+// to SHIFT_IR
+// send_tms(5, 0b00110, 1000);
+\h(02 01 00 00 00 05 00 00 00 06 03)
+
+// load SHIFT_IR with IDCODE of the dmi register (= 0x11)
+//  in_data = 0x00000011;
+//  read_data = 0x00;  
+//  shift_data(31, &in_data, &read_data, tms_zero, 10);
+//  shift_data(1, &in_data, &read_data, tms_one, 10); // on the last bit, transition to EXIT1_IR by using a tms of 1
+\h(02 0A 82 00 00 00 1F 00 00 00 11 00 03)
+\h(02 0A 82 00 00 00 01 00 00 00 00 01 03)
+
+// capture IR and shift into IR data (transition over CAPTURE IR) and enter SHIFT_DR
+//  send_tms(6, 0b001110, 1000);
+\h(02 01 00 00 00 06 00 00 00 0E 03)
+
+// write 44 bits into DTM.DMI_COMMAND
+// in_data = 0x00000002;
+// read_data = 0x00;
+// shift_data(32, &in_data, &read_data, tms_zero, 10);
+\h(02 0A 82 00 00 00 20 00 00 00 0A 82 00 03)
+
+// in_data = 0x042;
+// read_data = 0x00;
+// shift_data(11, &in_data, &read_data, tms_zero, 10);
+\h(02 0A 82 00 00 00 0B 00 00 00 42 00 03)
+
+// last step shifts in data and leaves the state at the same time
+// in_data = 0x00;
+// read_data = 0x00;
+// shift_data(1, &in_data, &read_data, tms_one, 10);
+\h(02 0A 82 00 00 00 01 00 00 00 00 01 03)
+
+// enter UPDATE_DR because this triggers the actual write operation towards the wishbone slave
+//  printf("Enter UPDATE_DR\n");
+//  send_tms(3, 0b000110, 1000);
+\h(02 01 00 00 00 0A 83 00 00 00 06 03)
+
+
+# dm.dmcontrol (0x10), page 22
+
+| Bit Pos | Name      | Description |
+| ------- | --------- | ----------- |
+| 31      | haltreq   | Writing 0 clears the halt request bit for all currently selected harts. 
+						This may cancel outstanding halt requests for those harts.
+						Writing 1 sets the halt request bit for all currently selected harts. 
+						Running harts will halt whenever their halt request bit is set.
+						Writes apply to the new value of hartsel and hasel.
+| 30      | resumereq | Writing 1 causes the currently selected harts to resume once, if they are halted when the write occurs.
+						It also clears the resume ack bit for those harts.
+                        resumereq is ignored if haltreq is set.
+                        Writes apply to the new value of hartsel and hasel.
+| 29      | hartreset |	This optional field writes the reset bit for all the currently selected harts. 
+						To perform a reset the debugger writes 1, and then writes 0 to deassert the reset signal.
+						While this bit is 1, the debugger must not change which harts are selected.
+						If this feature is not implemented, the bit always stays 0, so after writing 1 the debugger can read the register back to see if the feature is supported.
+						Writes apply to the new value of hartsel and hasel.
+ 
+ 
+ 
+ ackhavereset 0 hasel hartsello

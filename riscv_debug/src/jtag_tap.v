@@ -31,7 +31,7 @@ module jtag_tap
     output wire start_write_transaction_o,
 
     output wire [31:0] addr_o, // address for the wishbone master to write to / read from
-    output wire [31:0] write_transaction_data_o // byte of data that the master uses during write transactions
+    output wire [63:0] write_transaction_data_o // byte of data that the master uses during write transactions
 
 );
 
