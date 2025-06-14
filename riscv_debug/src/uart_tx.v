@@ -14,6 +14,7 @@ module uart_tx
 	output reg                   tx_data_ready,    // send ready
 	output                       tx_pin            // serial data output
 );
+
 //calculates the clock cycle for baud rate 
 localparam                       CYCLE = CLK_FRE * 1000000 / BAUD_RATE;
 //state machine code

@@ -178,11 +178,18 @@ Example:
 \h(02 0A 82 00 00 00 1F 00 00 00 11 00 03)
 \h(02 0A 82 00 00 00 01 00 00 00 00 01 03)
 
-// capture IR and shift into IR data (transition over CAPTURE IR) and enter SHIFT_DR
+// capture IR shift into IR data (transition over CAPTURE IR) and finally into SHIFT_DR
 //  send_tms(6, 0b001110, 1000);
 \h(02 01 00 00 00 06 00 00 00 0E 03)
 
 // write 44 bits into DTM.DMI_COMMAND
+//
+// [Addr, 10 bit][Data, 32 bit][Operation, 2bit]
+// 0x10           0x01          01b (read) == 0x4000000005 == 0x[040][00000005] <--------- READ OPERATION
+// 0x10           0x01          10b (write) == 0x4000000006 == 0x[040][00000006] <--------- WRITE OPERATION
+// 0x10           0x15          10b (write) == 0x4000000056 == 0x[040][00000056] <--------- WRITE OPERATION
+// 0x10           0x80000000    10b (write) == 0x4200000002 == 0x[042][00000002] <--------- WRITE OPERATION
+//
 // in_data = 0x00000002;
 // read_data = 0x00;
 // shift_data(32, &in_data, &read_data, tms_zero, 10);
@@ -199,10 +206,21 @@ Example:
 // shift_data(1, &in_data, &read_data, tms_one, 10);
 \h(02 0A 82 00 00 00 01 00 00 00 00 01 03)
 
+// Now in EXIT1-DR
+
 // enter UPDATE_DR because this triggers the actual write operation towards the wishbone slave
 //  printf("Enter UPDATE_DR\n");
 //  send_tms(3, 0b000110, 1000);
 \h(02 01 00 00 00 0A 83 00 00 00 06 03)
+
+
+
+
+
+
+
+
+\h(02 01 00 00 00 01 00 00 00 01 03)
 
 
 # dm.dmcontrol (0x10), page 22

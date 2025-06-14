@@ -1,6 +1,6 @@
 module jtag_tap
 #(
-    parameter DATA_NUM = 22 // for printf
+    parameter DATA_NUM = 16 // for printf
 )
 (
 
@@ -19,7 +19,7 @@ module jtag_tap
     output wire jtag_tdo,
 
     // output - jtag - debug
-    output reg [5:0] r_led_reg, // Tang Nano has 6 LEDs
+    output wire [5:0] led_o, // Tang Nano has 6 LEDs
     output reg [DATA_NUM * 8 - 1:0] send_data, // printf debugging over UART
     output reg printf, // printf debugging over UART
 
@@ -34,6 +34,9 @@ module jtag_tap
     output wire [63:0] write_transaction_data_o // byte of data that the master uses during write transactions
 
 );
+
+reg [5:0] led;
+assign led_o = led;
 
 //
 // Wishbone
@@ -157,7 +160,7 @@ always @(posedge clk)
 begin
 
     // if reset is asserted, 
-    if (!rst_n) 
+    if (rst_n == 0) 
     begin
         // go back to IDLE state
         cur_state = TEST_LOGIC_RESET;
@@ -170,11 +173,18 @@ begin
   
 end
 
+reg [31:0] jtag_clk_counter = 32'h00;
+
 /* write saved register bit to TDO on negedge. 
  * Basically this is where bits are shifted out on the negative clock edge.
  */
 always @(negedge jtag_clk)
 begin
+       
+    ////send_data <= { "-             ", 16'h0d0a };
+    //printf <= ~printf;
+
+    
 
     case (cur_state)
         
@@ -216,9 +226,25 @@ begin
     
 end
 
+
 // combinational always block for next state logic
 always @(posedge jtag_clk)
 begin
+
+    //send_data <= { "+             ", 16'h0d0a };
+    //send_data <= { "+" };
+    //printf <= ~printf;
+
+    if (rst_n == 0)
+    begin
+        jtag_clk_counter = 32'h00;
+        led = ~jtag_clk_counter;
+    end
+    else
+    begin
+        jtag_clk_counter = jtag_clk_counter + 32'h01;
+        led = ~jtag_clk_counter;
+    end
 
     case (cur_state)
   
@@ -230,18 +256,18 @@ begin
             begin
                 next_state <= RUN_TEST_IDLE;
 
-                send_data <= { "RUN_TEST_IDLE      ", 16'h0d0a };                    
-                r_led_reg <= ~RUN_TEST_IDLE;
+                //send_data <= { "RUN_TEST_IDLE      ", 16'h0d0a };                    
+                //led <= ~RUN_TEST_IDLE;
             end
             else
             begin
                 next_state <= cur_state;
 
-                send_data <= { "TEST_LOGIC_RESET   ", 16'h0d0a };
-                r_led_reg <= ~TEST_LOGIC_RESET;
+                //send_data <= { "TEST_LOGIC_RESET   ", 16'h0d0a };
+                //led <= ~TEST_LOGIC_RESET;
             end
 
-            printf = ~printf;           
+            //printf = ~printf;           
         end
 
         // State Id: 1
@@ -251,18 +277,18 @@ begin
             begin
                 next_state <= cur_state;
 
-                send_data <= { "RUN_TEST_IDLE      ", 16'h0d0a };
-                r_led_reg <= ~RUN_TEST_IDLE;
+                //send_data <= { "RUN_TEST_IDLE      ", 16'h0d0a };
+                //led <= ~RUN_TEST_IDLE;
             end
             else
             begin
                 next_state <= SELECT_DR_SCAN;
 
-                send_data <= { "SELECT_DR_SCAN     ", 16'h0d0a };                
-                r_led_reg <= ~SELECT_DR_SCAN;
+                //send_data <= { "SELECT_DR_SCAN     ", 16'h0d0a };                
+                //led <= ~SELECT_DR_SCAN;
             end
       
-            printf = ~printf;
+            //printf = ~printf;
         end
 
         // State Id: 2
@@ -280,28 +306,28 @@ begin
                 
                     IDCODE_INSTRUCTION:
                     begin
-                        send_data <= { "CAPTURE_DR A       ", 16'h0d0a };
+                        //send_data <= { "CAPTURE_DR A       ", 16'h0d0a };
 
                         dr_shift_register <= id_code_register;
                     end
 
                     BYPASS_INSTRUCTION:
                     begin
-                        send_data <= { "CAPTURE_DR B       ", 16'h0d0a };
+                        //send_data <= { "CAPTURE_DR B       ", 16'h0d0a };
 
                         bypass_shift_register <= bypass_register;
                     end
 
                     DMI_INSTRUCTION:
                     begin
-                        send_data <= { "CAPTURE_DR DMI     ", 16'h0d0a };
+                        //send_data <= { "CAPTURE_DR DMI     ", 16'h0d0a };
 
                         dmi_shift_register <= dmi_data_register;
                     end
 
                     CUSTOM_REGISTER_1_INSTRUCTION:
                     begin
-                        send_data <= { "CAPTURE_DR C       ", 16'h0d0a };
+                        //send_data <= { "CAPTURE_DR C       ", 16'h0d0a };
 
                         dr_shift_register <= dr_custom_register_1;
                     end
@@ -310,18 +336,18 @@ begin
     
                 next_state <= CAPTURE_DR;
 
-                r_led_reg <= ~CAPTURE_DR;
+                //led <= ~CAPTURE_DR;
             end
             else
             begin
 
                 next_state <= SELECT_IR_SCAN;
 
-                send_data <= { "SELECT_IR_SCAN     ", 16'h0d0a };                    
-                r_led_reg <= ~SELECT_IR_SCAN;
+                //send_data <= { "SELECT_IR_SCAN     ", 16'h0d0a };                    
+                //led <= ~SELECT_IR_SCAN;
             end
 
-            printf = ~printf;
+            //printf = ~printf;
         end
 
         // State Id: 3
@@ -334,8 +360,8 @@ begin
 
                 next_state <= SHIFT_DR;
 
-                send_data <= { "TO SHIFT_DR        ", 16'h0d0a };                
-                r_led_reg <= ~SHIFT_DR;
+                //send_data <= { "TO SHIFT_DR        ", 16'h0d0a };                
+                //led <= ~SHIFT_DR;
             end
             else
             begin
@@ -344,11 +370,11 @@ begin
 
                 next_state <= EXIT1_DR;
 
-                send_data <= { "TO EXIT1_DR        ", 16'h0d0a };                
-                r_led_reg <= ~EXIT1_DR;
+                //send_data <= { "TO EXIT1_DR        ", 16'h0d0a };                
+                //led <= ~EXIT1_DR;
             end
 
-            printf = ~printf;
+            //printf = ~printf;
         end
 
         // State Id: 4
@@ -362,7 +388,7 @@ begin
 
                     IDCODE_INSTRUCTION:
                         begin
-                            send_data <= { "SHIFT_DR A         ", 16'h0d0a };
+                            //send_data <= { "SHIFT_DR A         ", 16'h0d0a };
 
                             dr_save_register <= dr_shift_register[0];
                             dr_shift_register <= { jtag_tdi, dr_shift_register[31:1] };
@@ -370,7 +396,7 @@ begin
 
                     BYPASS_INSTRUCTION:
                         begin
-                            send_data <= { "SHIFT_DR B         ", 16'h0d0a };
+                            //send_data <= { "SHIFT_DR B         ", 16'h0d0a };
 
                             bypass_save_register <= bypass_shift_register;
                             bypass_shift_register <= jtag_tdi;
@@ -378,7 +404,8 @@ begin
 
                     DMI_INSTRUCTION:
                         begin
-                            send_data <= { "SHIFT_DR DMI       ", 16'h0d0a };
+                            //send_data <= { "SHIFT_DR DMI       ", 16'h0d0a };
+                            send_data <= jtag_tdi;
 
                             dmi_save_register <= dmi_shift_register[0];
                             dmi_shift_register <= { jtag_tdi, dmi_shift_register[DMI_REGISTER_WIDTH-1:1] };
@@ -386,7 +413,7 @@ begin
 
                     CUSTOM_REGISTER_1_INSTRUCTION:
                         begin
-                            send_data <= { "SHIFT_DR C         ", 16'h0d0a };
+                            //send_data <= { "SHIFT_DR C         ", 16'h0d0a };
 
                             dr_save_register <= dr_shift_register[0];
                             dr_shift_register <= { jtag_tdi, dr_shift_register[31:1] };
@@ -394,7 +421,7 @@ begin
 
                 endcase
 
-                r_led_reg <= ~SHIFT_DR;
+                //led <= ~SHIFT_DR;
             end
             else
             begin
@@ -404,7 +431,7 @@ begin
                     // on exit: SHIFT_DR
                     IDCODE_INSTRUCTION:
                         begin
-                            send_data <= { "SHIFT_DR A         ", 16'h0d0a };
+                            //send_data <= { "SHIFT_DR A         ", 16'h0d0a };
 
                             dr_save_register <= dr_shift_register[0];
                             dr_shift_register <= { jtag_tdi, dr_shift_register[31:1] };
@@ -412,7 +439,7 @@ begin
 
                     BYPASS_INSTRUCTION:
                         begin
-                            send_data <= { "SHIFT_DR B         ", 16'h0d0a };
+                            //send_data <= { "SHIFT_DR B         ", 16'h0d0a };
 
                             bypass_save_register <= bypass_shift_register;
                             bypass_shift_register <= jtag_tdi;
@@ -420,7 +447,8 @@ begin
 
                     DMI_INSTRUCTION:
                         begin
-                            send_data <= { "SHIFT_DR DMI       ", 16'h0d0a };
+                            //send_data <= { "SHIFT_DR DMI       ", 16'h0d0a };
+                            send_data <= jtag_tdi;
 
                             dmi_save_register <= dmi_shift_register[0];
                             dmi_shift_register <= { jtag_tdi, dmi_shift_register[DMI_REGISTER_WIDTH-1:1] };
@@ -428,7 +456,7 @@ begin
 
                     CUSTOM_REGISTER_1_INSTRUCTION:
                         begin
-                            send_data <= { "SHIFT_DR C         ", 16'h0d0a };
+                            //send_data <= { "SHIFT_DR C         ", 16'h0d0a };
 
                             dr_save_register <= dr_shift_register[0];
                             dr_shift_register <= { jtag_tdi, dr_shift_register[31:1] };
@@ -438,8 +466,9 @@ begin
 
                 next_state <= EXIT1_DR;
 
-                send_data <= { "EXIT1_DR           ", 16'h0d0a };                
-                r_led_reg <= ~EXIT1_DR;
+                //send_data <= { "EXIT1_DR           ", 16'h0d0a };                
+                
+                //led <= ~EXIT1_DR;
             end
 
             printf = ~printf;
@@ -452,8 +481,8 @@ begin
             begin
                 next_state <= PAUSE_DR;
 
-                send_data <= { "PAUSE_DR           ", 16'h0d0a };                
-                r_led_reg <= ~PAUSE_DR;
+                //send_data <= { "PAUSE_DR           ", 16'h0d0a };                
+                //led <= ~PAUSE_DR;
             end
             else
             begin
@@ -473,21 +502,22 @@ begin
                     DMI_INSTRUCTION:
                     begin
                         // printf
-                        //send_data <= { "DMI_INSTRUCTION    ", 16'h0d0a };
+                        ////send_data <= { "DMI_INSTRUCTION    ", 16'h0d0a };
 
-                        dmi_data_register <= dmi_shift_register;
+                        dmi_data_register = dmi_shift_register;
 
                         // start a wishbone write or read, depending on the op bits
 
-                        dmi_data_register_addr_reg <= dmi_data_register[43:34];
-                        dmi_data_register_data_reg <= dmi_data_register[33:2];
-                        dmi_data_register_op_reg <= dmi_data_register[1:0];
+                        dmi_data_register_addr_reg = dmi_data_register[43:34];
+                        dmi_data_register_data_reg = dmi_data_register[33:2];
+                        dmi_data_register_op_reg = dmi_data_register[1:0];
 
                         case (dmi_data_register_op_reg)
 
                             OP_OUTGOING_NOP: begin
                                 // printf
-                                send_data <= { "OP_OUTGOING_NOP    ", 16'h0d0a };
+                                //send_data <= { "OP_OUTGOING_NOP    ", 16'h0d0a };
+                                send_data <= { 8'hF0 };
 
                                 start_read_transaction_o_reg <= 0;
                                 start_write_transaction_o_reg <= 0;
@@ -495,7 +525,8 @@ begin
 
                             OP_OUTGOING_READ: begin
                                 // printf
-                                send_data <= { "OP_OUTGOING_READ   ", 16'h0d0a };
+                                //send_data <= { "OP_OUTGOING_READ   ", 16'h0d0a };
+                                send_data <= { 8'hF1 };
 
                                 // perform a read
                                 start_read_transaction_o_reg <= 1; // perform read
@@ -506,7 +537,8 @@ begin
 
                             OP_OUTGOING_WRITE: begin
                                 // printf
-                                send_data <= { "OP_OUTGOING_WRITE  ", 16'h0d0a };
+                                //send_data <= { "OP_OUTGOING_WRITE  ", 16'h0d0a };
+                                send_data <= { 8'hF2 };
 
                                 // perform a write
                                 start_read_transaction_o_reg <= 0; // no read
@@ -517,7 +549,8 @@ begin
 
                             OP_OUTGOING_RESERVED: begin
                                 // printf
-                                send_data <= { "OP_OUTGOING_RESERVE", 16'h0d0a };
+                                //send_data <= { "OP_OUTGOING_RESERVE", 16'h0d0a };
+                                send_data <= { 8'hF3 };
 
                                 start_read_transaction_o_reg <= 0;
                                 start_write_transaction_o_reg <= 0;
@@ -525,7 +558,8 @@ begin
                             
                             default: begin
                                 // printf
-                                send_data <= { "default            ", 16'h0d0a };
+                                //send_data <= { "default            ", 16'h0d0a };
+                                send_data <= { 8'hF4 };
 
                                 start_read_transaction_o_reg <= 0;
                                 start_write_transaction_o_reg <= 0;
@@ -544,8 +578,8 @@ begin
 
                 next_state <= UPDATE_DR;
 
-                //send_data <= { "UPDATE_DR          ", 16'h0d0a };                
-                r_led_reg <= ~UPDATE_DR;
+                ////send_data <= { "UPDATE_DR          ", 16'h0d0a };                
+                //led <= ~UPDATE_DR;
             end
 
             printf = ~printf;
@@ -558,18 +592,18 @@ begin
             begin
                 next_state <= cur_state;
 
-                send_data <= { "PAUSE_DR           ", 16'h0d0a };
-                r_led_reg <= ~PAUSE_DR;
+                //send_data <= { "PAUSE_DR           ", 16'h0d0a };
+                //led <= ~PAUSE_DR;
             end
             else
             begin
                 next_state <= EXIT2_DR;
 
-                send_data <= { "EXIT2_DR           ", 16'h0d0a };                
-                r_led_reg <= ~EXIT2_DR;
+                //send_data <= { "EXIT2_DR           ", 16'h0d0a };                
+                //led <= ~EXIT2_DR;
             end
 
-            printf = ~printf;
+            //printf = ~printf;
         end
 
         // State Id: 7
@@ -579,8 +613,8 @@ begin
             begin
                 next_state <= SHIFT_DR;
 
-                send_data <= { "SHIFT_DR           ", 16'h0d0a };                
-                r_led_reg <= ~SHIFT_DR;
+                //send_data <= { "SHIFT_DR           ", 16'h0d0a };                
+                //led <= ~SHIFT_DR;
             end
             else
             begin
@@ -601,21 +635,22 @@ begin
                     DMI_INSTRUCTION:
                     begin
                         // printf
-                        //send_data <= { "DMI_INSTRUCTION    ", 16'h0d0a };
+                        ////send_data <= { "DMI_INSTRUCTION    ", 16'h0d0a };
 
-                        dmi_data_register <= dmi_shift_register;
+                        dmi_data_register = dmi_shift_register;
 
                         // start a wishbone write or read, depending on the op bits
 
-                        dmi_data_register_addr_reg <= dmi_data_register[43:34];
-                        dmi_data_register_data_reg <= dmi_data_register[33:2];
-                        dmi_data_register_op_reg <= dmi_data_register[1:0];
+                        dmi_data_register_addr_reg = dmi_data_register[43:34];
+                        dmi_data_register_data_reg = dmi_data_register[33:2];
+                        dmi_data_register_op_reg = dmi_data_register[1:0];
 
                         case (dmi_data_register_op_reg)
 
                             OP_OUTGOING_NOP: begin
                                 // printf
-                                send_data <= { "OP_OUTGOING_NOP    ", 16'h0d0a };
+                                //send_data <= { "OP_OUTGOING_NOP    ", 16'h0d0a };
+                                send_data <= { 8'hF0 };
 
                                 start_read_transaction_o_reg <= 0;
                                 start_write_transaction_o_reg <= 0;
@@ -623,7 +658,8 @@ begin
 
                             OP_OUTGOING_READ: begin
                                 // printf
-                                send_data <= { "OP_OUTGOING_READ   ", 16'h0d0a };
+                                //send_data <= { "OP_OUTGOING_READ   ", 16'h0d0a };
+                                send_data <= { 8'hF1 };
 
                                 // perform a read
                                 start_read_transaction_o_reg <= 1; // perform read
@@ -634,7 +670,8 @@ begin
 
                             OP_OUTGOING_WRITE: begin
                                 // printf
-                                send_data <= { "OP_OUTGOING_WRITE  ", 16'h0d0a };
+                                //send_data <= { "OP_OUTGOING_WRITE  ", 16'h0d0a };
+                                send_data <= { 8'hF2 };
 
                                 // perform a write
                                 start_read_transaction_o_reg <= 0; // no read
@@ -645,7 +682,8 @@ begin
 
                             OP_OUTGOING_RESERVED: begin
                                 // printf
-                                send_data <= { "OP_OUTGOING_RESERVE", 16'h0d0a };
+                                //send_data <= { "OP_OUTGOING_RESERVE", 16'h0d0a };
+                                send_data <= { 8'hF3 };
 
                                 start_read_transaction_o_reg <= 0;
                                 start_write_transaction_o_reg <= 0;
@@ -653,7 +691,8 @@ begin
                             
                             default: begin
                                 // printf
-                                send_data <= { "default            ", 16'h0d0a };
+                                //send_data <= { "default            ", 16'h0d0a };
+                                send_data <= { 8'hF4 };
 
                                 start_read_transaction_o_reg <= 0;
                                 start_write_transaction_o_reg <= 0;
@@ -673,10 +712,10 @@ begin
                 next_state <= UPDATE_DR;
 
                 //send_data <= { "UPDATE_DR          ", 16'h0d0a };                
-                r_led_reg <= ~UPDATE_DR;
+                //led <= ~UPDATE_DR;
             end
 
-            printf = ~printf;
+            printf <= ~printf;
         end
 
         // State Id: 8
@@ -686,18 +725,18 @@ begin
             begin
                 next_state <= RUN_TEST_IDLE;
 
-                send_data <= { "RUN_TEST_IDLE      ", 16'h0d0a };                
-                r_led_reg <= ~RUN_TEST_IDLE;
+                //send_data <= { "RUN_TEST_IDLE      ", 16'h0d0a };                
+                //led <= ~RUN_TEST_IDLE;
             end
             else
             begin
                 next_state <= SELECT_DR_SCAN;
 
-                send_data <= { "SELECT_DR_SCAN     ", 16'h0d0a };                
-                r_led_reg <= ~SELECT_DR_SCAN;
+                //send_data <= { "SELECT_DR_SCAN     ", 16'h0d0a };                
+                //led <= ~SELECT_DR_SCAN;
             end
 
-            printf = ~printf;
+            //printf = ~printf;
         end
 
         // State Id: 9
@@ -710,8 +749,8 @@ begin
 
                 next_state <= CAPTURE_IR;
 
-                send_data <= { "CAPTURE_IR         ", 16'h0d0a };                    
-                r_led_reg <= ~CAPTURE_IR;
+                //send_data <= { "CAPTURE_IR         ", 16'h0d0a };                    
+                //led <= ~CAPTURE_IR;
             end
             else
             begin
@@ -721,11 +760,11 @@ begin
 
                 next_state <= TEST_LOGIC_RESET;
 
-                send_data <= { "TEST_LOGIC_RESET   ", 16'h0d0a };                    
-                r_led_reg <= ~TEST_LOGIC_RESET;
+                //send_data <= { "TEST_LOGIC_RESET   ", 16'h0d0a };                    
+                //led <= ~TEST_LOGIC_RESET;
             end
 
-            printf = ~printf;
+            //printf = ~printf;
         end
 
         // State Id: 10
@@ -738,8 +777,8 @@ begin
 
                 next_state <= SHIFT_IR;
 
-                send_data <= { "SHIFT_IR           ", 16'h0d0a };                    
-                r_led_reg <= ~SHIFT_IR;
+                //send_data <= { "SHIFT_IR           ", 16'h0d0a };                    
+                //led <= ~SHIFT_IR;
             end
             else
             begin
@@ -749,11 +788,11 @@ begin
 
                 next_state <= EXIT1_IR;
 
-                send_data <= { "EXIT1_IR           ", 16'h0d0a };                    
-                r_led_reg <= ~EXIT1_IR;
+                //send_data <= { "EXIT1_IR           ", 16'h0d0a };                    
+                //led <= ~EXIT1_IR;
             end
 
-            printf = ~printf;
+            //printf = ~printf;
         end
 
         // State Id: 11
@@ -765,8 +804,8 @@ begin
                 ir_save_register <= ir_shift_register[0];
                 ir_shift_register <= { jtag_tdi, ir_shift_register[31:1] };
 
-                send_data <= { "SHIFT_IR           ", 16'h0d0a };
-                r_led_reg <= ~SHIFT_IR;
+                //send_data <= { "SHIFT_IR           ", 16'h0d0a };
+                //led <= ~SHIFT_IR;
             end
             else
             begin
@@ -779,11 +818,11 @@ begin
 
                 next_state = EXIT1_IR;
                 
-                send_data <= { "EXIT1_IR           ", 16'h0d0a };
-                r_led_reg <= ~EXIT1_IR;                
+                //send_data <= { "EXIT1_IR           ", 16'h0d0a };
+                //led <= ~EXIT1_IR;                
             end
 
-            printf = ~printf;
+            //printf = ~printf;
         end
 
         // State Id: 12
@@ -795,8 +834,8 @@ begin
 
                 next_state <= PAUSE_IR;
 
-                send_data <= { "PAUSE_IR           ", 16'h0d0a };                
-                r_led_reg <= ~PAUSE_IR;
+                //send_data <= { "PAUSE_IR           ", 16'h0d0a };                
+                //led <= ~PAUSE_IR;
             end
             else
             begin
@@ -806,11 +845,11 @@ begin
 
                 next_state <= UPDATE_IR;
 
-                send_data <= { "UPDATE_IR          ", 16'h0d0a };                
-                r_led_reg <= ~UPDATE_IR;
+                //send_data <= { "UPDATE_IR          ", 16'h0d0a };                
+                //led <= ~UPDATE_IR;
             end
 
-            printf = ~printf;
+            //printf = ~printf;
         end
 
         // State Id: 13
@@ -818,17 +857,17 @@ begin
         begin
             if (jtag_tms == 1'b0) 
             begin
-                send_data <= { "PAUSE_IR           ", 16'h0d0a };
-                r_led_reg <= ~PAUSE_IR;
+                //send_data <= { "PAUSE_IR           ", 16'h0d0a };
+                //led <= ~PAUSE_IR;
             end
             else
             begin
-                send_data <= { "EXIT2_IR           ", 16'h0d0a };
+                //send_data <= { "EXIT2_IR           ", 16'h0d0a };
                 next_state <= EXIT2_IR;
-                r_led_reg <= ~EXIT2_IR;
+                //led <= ~EXIT2_IR;
             end
 
-            printf = ~printf;
+            //printf = ~printf;
         end
 
         // State Id: 14
@@ -841,8 +880,8 @@ begin
 
                 next_state <= SHIFT_IR;
 
-                send_data <= { "SHIFT_IR           ", 16'h0d0a };                
-                r_led_reg <= ~SHIFT_IR;
+                //send_data <= { "SHIFT_IR           ", 16'h0d0a };                
+                //led <= ~SHIFT_IR;
             end
             else
             begin
@@ -851,11 +890,11 @@ begin
 
                 next_state <= UPDATE_IR;
 
-                send_data <= { "UPDATE_IR          ", 16'h0d0a };                
-                r_led_reg <= ~UPDATE_IR;
+                //send_data <= { "UPDATE_IR          ", 16'h0d0a };                
+                //led <= ~UPDATE_IR;
             end
 
-            printf = ~printf;
+            //printf = ~printf;
         end
 
         // State Id: 15
@@ -863,18 +902,18 @@ begin
         begin
             if (jtag_tms == 1'b0) 
             begin
-                send_data <= { "RUN_TEST_IDLE      ", 16'h0d0a };
+                //send_data <= { "RUN_TEST_IDLE      ", 16'h0d0a };
                 next_state <= RUN_TEST_IDLE;
-                r_led_reg <= ~RUN_TEST_IDLE;
+                //led <= ~RUN_TEST_IDLE;
             end
             else
             begin
-                send_data <= { "SELECT_DR_SCAN     ", 16'h0d0a };
+                //send_data <= { "SELECT_DR_SCAN     ", 16'h0d0a };
                 next_state <= SELECT_DR_SCAN;
-                r_led_reg <= ~SELECT_DR_SCAN;
+                //led <= ~SELECT_DR_SCAN;
             end
 
-            printf = ~printf;
+            //printf = ~printf;
         end
 
         // State Id: 16
@@ -889,7 +928,7 @@ begin
 
             // next state
             next_state <= TEST_LOGIC_RESET;
-            r_led_reg <= ~TEST_LOGIC_RESET;
+            ////led <= ~TEST_LOGIC_RESET;
         end
         
     endcase

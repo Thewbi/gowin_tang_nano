@@ -1,6 +1,6 @@
 module uart_controller
 #(
-    parameter                   DATA_NUM = 16       // clock frequency(Mhz)
+    parameter                   DATA_NUM = 16       
 )
 (
 
@@ -76,7 +76,7 @@ begin
                 end
                 else
 
-                // send 12 bytes data
+                // send DATA_NUM bytes data
                 // o_tx_data_valid - valid data is provided by the sender
                 // tx_data_ready - the tx module is done sending and has free resources to send more
                 // tx_cnt < DATA_NUM - 1 - characters from text still left to send
