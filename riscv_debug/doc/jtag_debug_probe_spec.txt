@@ -60,8 +60,9 @@ The sender has to accomodate for that situation!
 01 - CMD { 0x01 = send_tms, 0x02 = shift_data }
 03 - ETX
 
+# Commands
 
-# ping (0x00)
+## Command: ping (0x00)
 
 A hello world message to check if the receiver is functional
 
@@ -80,7 +81,7 @@ Request: \h(02 00 03)
 
 
 
-# send_tms (0x01)
+## Command: send_tms (0x01)
 
 param 0 - number_bits_to_execute - number of bits to execute (max 32) (uint32_t)
 param 1 - bits_to_execute - the bits to put onto tms (max 32) (uint32_t)
@@ -105,7 +106,7 @@ Therefore send:
 
 
 
-# shift_data (0x02)
+## Command: shift_data (0x02)
 
 number of bits to shift (max 32)
 param 0 - number_bits_to_shift - number of bits to shift (max 32) (uint32_t)
@@ -245,3 +246,45 @@ Example:
  
  
  ackhavereset 0 hasel hartsello
+ 
+ 
+ 
+# JTAG Software Client Implementation
+
+Has to have a function which takes in 
+- the length of the data to write
+- the data to write
+- the IRCODE of the register to write
+- the length of the register
+- the length of the chunks, that the debug probe can transfer == [DEBUG_PROBE_WIDTH]
+
+Returns:
+- the amount of bytes shifted out (cause by shifting in bits)
+
+This function will transmit chunks each maximum of [DEBUG_PROBE_WIDTH] bits to the debug probe.
+This means that this function will potentially send several shift_data (0x02) commands to the 
+debug probe in order to fulfull one SHIFT_DR transaction.
+
+## Example 1 - 32 bits
+
+The user wants to write 32 bits of data into a 32 bit register in the JTAG TAP using a 
+debug probe that can transfer 32 bits at a time.
+
+The data length matches accross the entire toolchain, so two chunks suffice to 
+transfer the data. The first chunk will shift in 31 bits keeping TMS 0 in order
+to remain in SHIFT_DR. The second chunk will transfer the 32th bit and have a TMS
+of 1 in order to finally leave SHIFT_DR with correct data in the respective shift register.
+
+## Example 2 - 44 bits
+
+The user wants to write 44 bits of data into a 44 bit register in the JTAG TAP using a 
+debug probe that can transfer 32 bits at a time.
+
+The client splits the 44 bit into three chunks.
+- 1st chunk contains 32 bits with TMS=0 since the debug probe can only transfer 32 bits at a time. (12 bits remain)
+- 2nd chunk contains 11 bits with TMS=0 since 12 bits remain but the very last bit has to leave the SHIFT_DR state (1 bit remains)
+- 3rd chunk contains 1 bit with a TMS=1 in order to finally leave SHIFT_DR with correct data in the respective shift register.
+
+After each chunk, the client collects the shifted out bits to combine them with the rest of the shifted out bits to arrive at the result.
+At the end of the entire write transaction, the client will return the combined bits to the caller as a result of the transaction and
+as a result of the function call.

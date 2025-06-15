@@ -1,0 +1,1518 @@
+# Next Steps
+
+[OK] define a DM wishbone slave.
+[OK] Inside the DM, define the dm.dmcontrol (0x10) register.
+[OK] Write a value into it using the DTM.
+[OK] Read the value back using the DTM.
+
+# Introduction
+
+The RISC-V debug specification defines a Debug Module which allows access and control over harts.
+
+To interact with a DM, a pyhsical layer is required to transmit control signals between a debugger
+running on a PC and the DM inside the FGPA or RISC-V silicon. Each physical connection technology
+is abstracted into a Debug Transport Module (DTM)
+
+JTAG is the one implementation for this physical layer. Another option might be a USB based 
+hardware implementation. This means there might be a DTM for JTAG and another DTM for USB.
+The DTM abstracts the specific physical data transmission on the outward facing side and 
+provides a unified interface on the DM facing side. The unification between the DM and the DTM
+is achieved by introducing the Debug Module Interface (DMI). The DM only needs to speak a
+single language which is the DMI. A DM can then connect to any DTM and the different DTMs
+enable different transmission technologies to outside tools and devices. As such the DTM
+performs the function of a gateway which attaches the RISC-V CPU to different physical 
+data trasmission technologies.
+
+See chapter 6, page 62:
+
+"
+Debug Transport Modules provide access to the DM over one or more transports (e.g. JTAG or
+USB). There may be multiple DTMs in a single platform. Ideally every component that communicates
+with the outside world includes a DTM, allowing a platform to be debugged through every transport
+it supports. For instance a USB component could include a DTM. This would trivially allow any
+platform to be debugged over USB. All that is required is that the USB module already in use also
+has access to the Debug Module Interface.
+"
+
+As JTAG is using it's own specification
+and terminology, this documents tries to make the distinction between the RISC-V debug specification
+and the JTAG specification clear. This document shows, how the RISC-V components are mapped to JTAG
+components.
+
+# Chain of RISC-V Debug Specification Components
+
+Source: https://github.com/riscv/riscv-debug-spec/blob/release/riscv-debug-release.pdf
+
+"
+The user interacts with the Debug Host (e.g. laptop), which is running a debugger (e.g. gdb). 
+
+The debugger communicates with a Debug Translator (e.g. OpenOCD, which may include a hardware
+driver) to communicate with Debug Transport Hardware (e.g. Olimex USB-JTAG adapter). 
+
+The Debug Transport Hardware connects the Debug Host to the Platform’s Debug Transport Module
+(DTM). The DTM provides access to one or more Debug Modules (DMs) using the Debug Module
+Interface (DMI).
+"
+
+The Debug Module Interface is the protocol spoken between the DTM and the DMs.
+
+A DM is controlling one or more harts. Each hart in the platform is controlled by exactly one DM.
+There are no restrictions but usually all harts in a single core are controlled by the same DM.
+
+DM might be implemented as their own HDL module and talk to the RISC-V CPU design.
+According to the debug specification, here are the points a DM must (or may) implement:
+1. Give the debugger necessary information about the implementation. (Required)
+2. Allow any individual hart to be halted and resumed. (Required)
+3. Provide status on which harts are halted. (Required)
+4. Provide abstract read and write access to a halted hart’s GPRs. (Required)
+5. Provide access to a reset signal that allows debugging from the very first instruction after reset. (Required)
+6. Provide a mechanism to allow debugging harts immediately out of reset (regardless of the reset cause). (Optional)
+7. Provide abstract access to non-GPR hart registers. (Optional)
+8. Provide a Program Buffer to force the hart to execute arbitrary instructions. (Optional)
+9. Allow multiple harts to be halted, resumed, and/or reset at the same time. (Optional)
+10. Allow memory access from a hart’s point of view. (Optional)
+11. Allow direct System Bus Access. (Optional)
+
+
+
+
+
+# JTAG
+
+Let's first look at JTAG in isolation and define JTAG terminology. In a later step, the
+RISC-V Debug Specification components are then mapped onto the JTAG components defined here.
+
+Links: 
+https://medium.com/@aliaksandr.kavalchuk/diving-into-jtag-protocol-part-1-overview-fbdc428d3a16
+https://github.com/freecores/jtag/blob/master/tap/doc/jtag.pdf
+
+First, lets define the pins that JTAG provides.
+
+The bare minimum of pins required are TMS, TCK, TDI, TDO. They are explained below.
+
+There are also more Pins that are optional:
+https://metebalci.com/blog/bare-metal-raspberry-pi-3b-jtag/
+TRST (Test Reset), SRST (System Reset) and ARM specific RTCK (Return Test Clock) signals.
+
+## JTAG pins, Mode Selection, Control of the State Machines, (TMS, TCK)
+
+TMS - (Test) mode select - sending a sequence of HIGH or LOW (1 or 0) causes
+transitions through the state machine.
+TCK - (Test) clock signal
+
+For the TMS and TCK pins, all TAPs are connected to the JTAG client in parallel.
+This means when the JTAG client sends a TMS and a TCK signal, all TAPs receive
+these signals at the same time and they will also react to those signals at the
+same time! Each TAP maintains a state machine. All TAPs use the exact same 
+state machine structure hence all TAPs transition through the machine in parallel!
+
+See: https://www.fpga4fun.com/JTAG2.html
+
+Next are the TDI and TDO pins. They are not connected in parallel but they are
+daisy chained instead.
+
+## JTAG pins, Data Transmission (TDI, TDO)
+
+TDI - (Test) data in - From the viewpoint of a TAP, data goes in
+TDO - (Test) data out - From the viewpoint of a TAP, data comes out
+
+When there is more than a single TAP present in the target device, the TAPs are 
+daisy-chained by connecting the TDO pin to the TDI pin of the next TAP in line.
+
+JTAG assumes a daisy-chained list of TAPs which means it assumes that TAPs are connected 
+in a linear fashion to each other and that the client to JTAG is only connected to the
+first participant's TDI pin. 
+
+Therefore bits need to be shifted along the daisy chain until they have arrived at the correct
+participant!
+
+See: https://www.fpga4fun.com/JTAG2.html
+
+## Instruction Register (IR) and Data Register (DR)
+
+JTAG is specified general enough so it can be mapped on any target hardware.
+JTAG makes no assumptions on how many registers are available in the target hardware.
+
+JTAG uses TAPs. TAP stands for Test Access Port. JTAG allows more than a single TAP per
+target device. 
+
+The TAP has only a single IR register. The IR register can have an arbitrary amount of bits
+in it! It is not defined how many bits wide the IR register is! Therefore special BSDL files
+may be distributed along with JTAG capable devices. the BSDL files describe how many bits
+wide the IR register is on each TAP and what instructions exist.
+
+The IR register is used to select a instruction that the TAP is supposed to execute.
+The IR register is filled, by shifting in bits over the TDI pin while the state machine
+is in it's SHIFT-IR state. 
+
+The TAP has several DR registers. They are shifted during the SHIFT-DR state.
+The instruction in the IR register determines which of the DR registers is currently made
+active and that specific DR register receives the shifted bits.
+
+
+
+
+
+### BYPASS Instruction and Device Counting
+
+See: https://www.fpga4fun.com/JTAG3.html
+
+A first helloworld test for JTAG might be to implement counting the TAPs inside the 
+JTAG daisy chain. Counting devices is necessary if the JTAG client does not know how
+many TAPs exist in the device (and it's internal JTAG daisy chain beforehand. 
+
+This is necessary if no BSDL file is available for the device. Without a BSDL file 
+the JTAG client does not know how many TAPs are part of the daisy chain and it also 
+does not know how wide the IR registers in each TAP are. (BSDL files: https://bsdl.info/)
+
+The only thing that the JTAG client knows is that the mandatory instruction "BYPASS" must
+be implemented by each TAP and it knows that this instruction is encoded using only ones!
+
+The strategy to counting devices is as follows:
+1. The goal is to execute the BYPASS instruction on all devices in the daisy chain. It is
+unknown how many devices the daisy chain consists of. Enter SHIFT_IR state and shift an abundant 
+amount of ones into all IR-registers, because all ones is the BYPASS instruction
+2. Enter SHIFT-DR state. The BYPASS register pair is made current. In the second step the
+goal is to fill all BYPASS registers with 0 in order to clear the to a defined state.
+It is not known how many devices the daisy chain consists of and therefore it is unknown
+how many BYPASS registers are daisy chained. Therefore send an abundance of zeroes.
+3. Shift in ones while counting the amount of shifts. When the first 1 exits the daisy
+chained BYPASS registers, the shift count resembles the amount of daisy chained devices.
+REMEMBER: The BYPASS register is mandated to have a width of a single bit.
+
+Next follows a detailed instruction list including the transitions between the states.
+
+The trigger the BYPASS instruction on all TAPS:
+
+1. Reset the state machine: Go back to the initial state (DEBUG_LOGIC_RESET) by sending 5 1s over the TMS pin.
+The statemachine will transition to DEBUG_LOGIC_RESET from any possible state when it sees 5 1s on TMS.
+For this it does not matter which signal is present on TDI.
+SIDE NOTE: On entering DEBUG_LOGIC_RESET, switches SW3 and SW4 are moved to the ID position (middle position)
+as visualized here: https://medium.com/@aliaksandr.kavalchuk/diving-into-jtag-protocol-part-1-overview-fbdc428d3a16
+This makes the ID register active implicitly. (this behaviour is optional).
+
+1. Enter SHIFT-IR (11d = 0x0B = 0b1011) state by sending 0, 1, 1, 0, 0 over the TMS pin.
+SIDE_NOTE: on entering the SELECT-IR-SCAN state (on the way to the SHIFT-IR state), the switches SW1 and SW2 
+are flipped to the bottom position: https://medium.com/@aliaksandr.kavalchuk/diving-into-jtag-protocol-part-1-overview-fbdc428d3a16
+This means the shifted data will go into the IR register.
+The shifted data is only placed into the IR register during the SHIFT-IR state though!
+
+1. Fill the IR register of all TAPS with all ones by sending a 1 over TDI while sending 
+0 over the TMS pin in order to keep that state machine in the SHIFT_IR state and along
+with the very last 1, transition to the EXIT1-IR state.
+
+Send 999 1s because the assumption is that 999 larger then the combined width of all IR registers
+of all TAPs in the daisy chain. 
+
+Hint: The 999th step needs to exit the SHIFT-IR state while also shifting the 999th 1 into the IR register. 
+Therefore in the 999th iteration, also assert the TMS pin! 
+
+After the last cycle, the state machine is now in EXIT1-IR state and the IR register of (hopefully) all devices
+contains 1 bits which is the opcode for BYPASS.
+SIDE NOTE: This will cause switches SW3 and SW4 to go into the bottom position as viasualized here:
+https://medium.com/@aliaksandr.kavalchuk/diving-into-jtag-protocol-part-1-overview-fbdc428d3a16 and it 
+will make the BYPASS register current for shifting.
+
+1. Enter the SHIFT-DR state by sending 1, 1, 0, 0 over the TMS pin. It does not matter which
+value is currently placed on the TDI pin since the IR register is only filled in the SHIFT-IR state
+which was exited already so the value on the TDI pin is without effect during the transitions.
+SIDE_NOTE: on entering SELECT-DR-SCAN state, the switches SW1 and SW2 are flipped to the top
+position: https://medium.com/@aliaksandr.kavalchuk/diving-into-jtag-protocol-part-1-overview-fbdc428d3a16
+
+1. At this point the instruction register (IR) is filled with all 1s which is the BYPASS instruction.
+Also the state machine is in the SHIFT-DR state and it is possible to shift data into the BYPASS register.
+NOTE: The BYPASS instruction activates the mandatory BYPASS register which is specified to have of width 1. 
+This means it will only hold a single bit. The BYPASS register will also only cause a single
+clock cycle of delay until it will return the value that is written into it. This single cycle
+delay is exploited to count the amount of delays and to determine the amount of devices in the 
+daisy chain which matches the amount of delay introduced until a input 1 exits the daisy chain
+at the output.
+
+The next step whilst being in SHIFT-DR state is to write zeroes into all BYPASS registers.
+To value of 999 is also used here. The idea is that there will be no more TAPs in the daisy chain
+and writing 999 zeroes will set all possible BYPASS registers to 0. During all this, TMS is 
+deasserted (0) so that the state machine remains in SHIFT-DR state.
+
+1. No state mechine transitions are performed, the state machine needs to remain in SHIFT-DR state
+Now, the device counting really starts. The system will send 1s over TDI while keeping TMS low 
+and check the amount of clock cycles until a 1 is shifted out at the end of the daisy chain
+at pin TDO. The amount of clock cycles it took to detect a 1 matches the amount of devices
+in the daisy chain.
+
+
+
+
+# JTAG Register Pairs and Operations on Register Pairs
+
+JTAG uses registers.
+
+First an foremost, there is the IR (Instruction Register) for which an IR-shift register and a IR-data register exists.
+The IR-shift and IR-data register pair is made current, when the SELECT-IR-SCAN JTAG state machine state is entered.
+
+At this point, the IR-shift register is placed between TDI and TDO. The content of the IR-data register at this point
+is most likely the IDCODE instruction since, the start state TEST_LOGIC_RESET places IDCODE instruction into the IR-data register
+automatically. 
+
+When the state CAPTURE-IR is entered, the IR-data register is copied into the IR-shift register, which is called capturing.
+In the SHIFT_IR state, the IR-shift register can be shifted out while data is shifted in at the same time.
+
+In the Update-IR the reverse operation to capturing takes place. The IR-shift register is copied into the IR-data register.
+
+Once a INSTRUCTION has been placed into the IR-data register using the steps above, the content of the IR-data register affect
+the rest of the JTAG TAP. The TAP will now use the content of the IR-data register as an INSTRUCTION "opcode". The most basic
+effect of an instruction is that a internal register inside the JTAG tap is referenced by the instruction.
+
+When the SELECT_DR_SCAN is entered, the TAP looks into the IR-data register to retrieve the instruction. It will make that
+instruction current! (This is not implemented in code because, nothing needs to be made current but logic-wise as a mental
+model, just imagine that a register matching the instruction is now the current DR-data register). Also the DR-shift
+register is placed between TDI and TDO. 
+
+When the state CAPTURE_DR is entered, the current DR-data register is captured, this means it is loaded into the DR-shift register.
+The DR-shift register is already placed between TDI and TDO by the SELECT_DR_SCAN state.
+
+In the Shift-DR state, the DR-shift register is shifted out and new data is shifted in.
+
+In the Update-DR register, the reverse capturing takes place. This means that the content of the DR-shift register is copied
+into the current DR-data register.
+
+----------- OLD EXPLANATION (INACURATE) --------------------------------------------------------------------------
+
+A register always comes as a register pair.
+The pair consists of the data-register and the shift-register.
+
+As an example, take the IDCODE register. The data-IDCODE register contains the id code of the device.
+the shift-IDCODE register is used for shifting and it can be placed between TDI and TDO.
+
+The approach is to first, select the IDCODE register pair (explained later). Once
+the register pair is selected, the state CAPTURE-DR will transfer the data-register into
+the shift-register. Then the SHIFT-DR state is used to shift the shift register out 
+and at the same time new data in. Then the UPDATE-DR state transfers data from the
+shift-register into the data-register of the register pair.
+
+To select a register pair, the IR-branch of the state machine is used. A register-pair has
+an instruction attached to it. This instruction has to be inserted into the IR register to
+select that register-pair.
+
+The IR register is again a register pair. First, the SELECT-IR-SCAN is entered, which selects
+the IR-register-pair. Then CAPTURE-IR is entered, which copies the data-register into the shift-register
+of the IR-register-pair. Then during SHIFT-IR, the instruction is shifted into the shift-register
+of the IR-register-pair. During UPDATE-IR, the shift-register is transferred into the data-register
+of the IR-register-pair. At this point the instruction is contained inside the IR register pair
+but the DR-register-pair matching that instruction is not yet selected!
+
+To select a register-pair, enter the SELECT-DR-SCAN state. This will take the current instruction
+from the data-register of the IR-register-pair and it makes the corresponding register-pair active
+that matches the code inside the IR-data-register. At this point a data register pair is selected!
+
+Then enter CAPTURE-DR which transferres the value inside the data register into the shift-register
+of that selected pair. Then enter SHIFT-DR to shift the shift-register of the selected pair out and
+new data in. Then, enter UPDATE-DR which will transfer the data from the shift-register of the pair
+into the pair's data register.
+
+A JTAG TAP will contain at least the the IR-register pair as otherwise, no data-register-pair selection
+would ever be possible. A JTAG TAP will also contain the BYPASS register pair so that counting the TAPs
+in a daisy chain is possible. BYPASS is 1 bit large! An optional 32-bit IDCODE registe pair, can be contained 
+inside a TAP which stores a unique id identifying the specific device so that a JTAG client knows
+which device it talks to and so that it can load the corresponding BSDL file to learn about all
+instructions for that device!
+
+Besides these basic registers, a JTAG device can contain further register pairs each mapped to a
+IR instruction by the BSDL file.
+
+
+
+
+
+The Shift register is the register that data is shifted in from TDI on the left
+and data is shifted out on the right to the TDO pin.
+
+Data is transferred into the Shift register either from the DR register or
+from the IR register. When the state CAPTURE-DR is entered, the DR register is
+transferred into the Shift register. When the state CAPTURE-IR is entered,
+the IR register is transferred into the Shift register.
+
+The reverse operation takes place in Update-DR and Update-IR. When those
+states are entered, the current value of the Shift register is transferred into
+DR or IR respectively.
+
+
+
+
+
+// all 16 JTAG state machine states
+parameter TEST_LOGIC_RESET  = 6'b000000; // 00d = 0x00 = b0000
+- Makes IR the current register-pair
+- Loads the IDCODE instruction into the data-IR
+
+
+parameter RUN_TEST_IDLE     = 6'b000001; // 01d = 0x01 = b0001
+???
+
+
+// DR
+parameter SELECT_DR_SCAN    = 6'b000010; // 02d = 0x02 = b0010
+- Takes the instruction from the data-IR register and maps it to a register-pair.
+- Makes this register-pair current so that all subsequent DR operations act on this register pair.
+
+
+parameter CAPTURE_DR        = 6'b000011; // 03d = 0x03 = b0011
+- for the current register pair, transfers the data-register into the shift-register of that pair
+
+
+parameter SHIFT_DR          = 6'b000100; // 04d = 0x04 = b0100
+- shifts out the shift-register of the current register pair
+
+
+parameter EXIT1_DR          = 6'b000101; // 05d = 0x05 = b0101
+??? Signals end of shift operation
+
+
+parameter PAUSE_DR          = 6'b000110; // 06d = 0x06 = b0110
+???
+
+
+parameter EXIT2_DR          = 6'b000111; // 07d = 0x07 = b0111
+??? Signals end of pause operation
+
+
+parameter UPDATE_DR         = 6'b001000; // 08d = 0x08 = b1000
+- transfers the shift-register into the data-register of the current register pair
+
+
+// IR
+parameter SELECT_IR_SCAN    = 6'b001001; // 09d = 0x09 = b1001
+- Makes IR the current register-pair
+
+
+parameter CAPTURE_IR        = 6'b001010; // 10d = 0x0A = b1010
+- transfers the data-register into the shift-register of the IR register pair
+
+
+parameter SHIFT_IR          = 6'b001011; // 11d = 0x0B = b1011
+- shifts out the shift-register of the IR register pair
+
+
+parameter EXIT1_IR          = 6'b001100; // 12d = 0x0C = b1100
+??? Signals end of shift operation
+
+
+parameter PAUSE_IR          = 6'b001101; // 13d = 0x0D = b1101
+???
+
+
+parameter EXIT2_IR          = 6'b001110; // 14d = 0x0E = b1110
+??? Signals end of pause operation
+
+
+parameter UPDATE_IR         = 6'b001111; // 15d = 0x0F = b1111
+- transfers the shift-register into the data-register of the IR register pair
+
+
+
+
+
+
+Ribbon Cable
+
+3v3
+TMS
+GND
+TCK
+GND
+TDO
+NC
+TDI
+GND
+RESET
+
+Olimex
+
+
+
+
+
+
+
+
+### Reading TAP IDs
+
+https://www.fpga4fun.com/JTAG3.html
+
+When the state machine is transitioned into the TEST_LOGIC_RESET state, most TAPs will perform
+the (optional) task of filling the IR-register with the IDCODE instruction and the DR Register 
+is loaded with a 32-bit value that represents the device ID. 
+
+The IDCODE instruction is not specified so each TAP may have a specific encoding that represents the IDCODE instruction.
+Because without a BSDL file, the encoding of the IDCODE instruction is not known, it is
+an advantage if the TAP writes the IDCODE instruction to IR automatically whenever TEST_LOGIC_RESET
+is entered.
+
+Assuming that a TAP fills the IR-register with the IDCODE during TEST_LOGIC_RESET, the current
+DR register is the IDCODE register which contains the ID of the TAP device! The IDCODE register
+is mandated to be 32 bits wide.
+
+In order to read the ID:
+
+0. Make sure to enter TEST_LOGIC_RESET (1, 1, 1, 1, 1) so that a known start state is
+reached but also that the IDCODE instruction is loaded into IR and the 32-bit device ID
+is loaded into DR.
+
+1. The state machine is transitioned to SHIFT-DR by sending the sequence 
+(0, 1, 0, 0) over the TMS pin.
+
+2. Once in SHIFT-DR state, all IDCODE registers of all daisy chained TAPS needs
+to be shifted out. Each IDCODE register is 32 bit wide. This means that if the client knows
+how many TAPS are part of the daisy chain, it needs to shift 32 times for each participant to
+read all ids of all TAPS. To shift out data when in SHIFT-DR state, send TMS = 0
+
+The amount of TAPs can be determined by using the procedure described in the last section.
+
+
+
+
+
+### Reading an arbitrary register
+
+In order to read registers in a general manner
+1. Enter SHIFT-IR state and remain there (SW1 and SW2 are placed in bottom position during SELECT-IR-SCAN)
+1. Shift in the address of the register to read into the IR register.
+1. On exiting the SHIFT-IR state, the data register is made current by changing the switches SW3 and SW4 
+which will go to either BYPASS, IDCODE or the top position (which is the internal shift register) based
+on the address/instruction that is located inside the IR register.
+1. Enter CAPTURE-DR state. (SW1 and SW2 are placed in top position during SELECT-DR-SCAN). 
+On entering CAPTURE-DR state, the value of the currently selected data register (having the address stored 
+inside the IR register) is copied into the internal shift register.
+1. Enter SHIFT-DR state. Now the value stored inside the internal shift register can be shifted out by putting data into
+TDI and reading data from TDO.
+
+
+
+To write registers in a general manner, JTAG uses a four??? step process.
+1. Shift in a JTAG instruction into the IR register.
+1. Shift in a register address into the (JTAG) IR register
+1. Shift out the bits in the DR.
+1. Update the value. Means the data stored in the data register (DR) is
+copied into the addressed register of the target.
+
+The three steps are executed by transitioning into the corresponding state machine
+state's. It is the task of the JTAG client to perform the correct transitions by
+sending TMS and TCK signals that make the state machine operate correctly.
+
+
+
+
+
+# Mapping from the RISC-V Debug Specification to JTAG
+
+The RISC-V debug specification's chapter "6.1 JTAG Debug Transport Module" (page 62)
+describes a DTM that uses JTAG as physical implementation.
+
+The mapping maps a RISC-V DTM to a JTAG TAP.
+Also the RISC-V register get addresses that can then be used with the JTAG TAP IR register.
+
+
+
+
+
+# Steps for implementation
+
+Firstly, start with JTAG (not USB).
+
+For a JTAG-based DTM, a full JTAG implementation is required.
+Therefore first concentrate on plain old JTAG and leave the RISCV debug spec out of the scope.
+
+Once JTAG works, bring back in the RISCV debug specification and start working on a DTM
+that implements DMI on the one side and JTAG on the other side so it can talk to the JTAG TAP.
+
+
+
+Zadig > Activate WinUSB driver (see https://github.com/m3y54m/cjmcu-ft232hq-programmer)
+openOCD can configure and use the FT232H over libusb.
+
+openocd -f interface/ftdi/ft232h-module-swd.cfg -f board/stm32f103c8_blue_pill.cfg -c init -c "reset halt" -c "flash read_bank 0 firmware.bin 0 0x10000" -c "reset" -c shutdown
+
+TCK is pin AD0
+TDI is pin AD1
+TDO is pin AD2
+TMS is pin AD3
+
+pins output 3V3 but are also 5V tolerant.
+
+
+
+Sample FTDI projects:
+
+https://ftdichip.com/software-examples/mpsse-projects/
+
+MPSSE Specification:
+
+https://www.ftdichip.com/Support/Documents/AppNotes/AN2232C-01_MPSSE_Cmnd.pdf
+
+
+
+# FT232H
+
+## FT232H JTAG commands
+
+### Commands 0x4A, 0x4B (JTAG TMS write but no data read)
+
+0x4A, 0x4B - The 0x4A, 0x4B commands will only write to DATA OUT (TDO) and TMS
+but they will not read data! See page 16 which states: "No read operation will take place".
+
+0x4A - sends data on the rising edge of the JTAG clock.
+0x4B - sends data on the falling edge of the JTAG clock.
+
+The question that remains is if you want the FT232H to send data on the rising or on the falling edge.
+
+The description of the SN74BCT8244ADW chip used in the FT232H example code states that:
+"Data is captured on the rising edge of TCK and outputs change on the falling edge of TCK."
+We will follow this convention. Data is therefore sent in on the rising edge and read
+on the falling edge. This means of the two options (0x4A, 0x4B) we have, we will use
+0x4A because it sends on the rising edge.
+
+### Commands 0x6A, 0x6B, 0x6E, 0x6F (JTAG TMS write AND data read)
+
+Out of all options
+
+0x6A : TMS with LSB first on +ve clk edge, read on +ve edge - use if clk is set to '1'
+0x6B : TMS with LSB first on -ve clk edge, read on +ve edge - use if clk is set to '0'
+0x6E : TMS with LSB first on +ve clk edge, read on -ve edge - use if clk is set to '1'
+0x6F : TMS with LSB first on -ve clk edge, read on -ve edge - use if clk is set to '0'
+
+0x6E seems to be exactly what we need as it writes on the rising edge and it will read on
+the falling edge.
+
+0x6E : TMS with LSB first on +ve clk edge, read on -ve edge - use if clk is set to '1'
+
+Example:
+Assume that the current state is SHIFT_IR and assume that our wish is to read a singe bit
+from the IR register.
+
+To write data, all pins need to be properly connected:
+
+TCK is pin AD0
+TDI is pin AD1
+TDO is pin AD2
+TMS is pin AD3
+
+
+
+### Writing a 32 bit values
+
+There is quite a big possibility that I have not grasped the genious that is the FT232H API as provided by the FT232H lib!
+But the parts that I have seen so far are hard to understand.
+
+Here is how to read and write a 32 bit value into a 32 bit register using TDI.
+First of all, TDI on the FT232H breakout board has to be connected to TDI on the target! TDO likewise.
+
+To send the 32 bit value, the only option you have is to perform 32 calls to the command 0x6E because per 0x6E command, 
+there is only a single bit of space for data and 7 bits for the TMS signal! The provided bit of data is applied to all
+TMS values alike!
+
+I do not understand the API concept. Why is there more space for TMS than for data? Why is there not API where I can just 
+tell the device to send a byte of data? And also what if I want to send different data per TMS value? What kind of sense
+does that API make? The only situation in which this separation of data and TMS makes sense is if you want to keep clocking
+in 1s or 0s for an extended amount of TMS signals! When is this the case ever?
+
+Anyways, you will clock in your 32 bit value bit-wise. At the same time, the 0x6E command will shift out a single bit to TDO
+for each bit you shift into TDI. Each shift operation alters an internal 8 bit (1 byte) buffer. Per shift operation, that
+snapshot of the internal 8 bit buffer is placed into the Queue. You can then read all snapshots from the queue using
+FT_GetQueueStatus() to see how many snapshots there are and using FT_Read() to read all the snapshots in one go (if you like).
+
+This means that for a 32 bit value that is shifted in bit-wise, the queue will contain 32 snapshots. Each snapshot takes 1 Byte
+of space in the queue.
+
+For shifting a value into the register, the shifted out bits might have no meaning. They are basically the old value of the 
+register that you have overriden using the write operation. If you care about the old value, you need to reassemble the value
+from the snapshots.
+
+Lets break the discussion up in a pure read() operation and a pure write() operation. The write() operation does not care
+about the old value that is shifted out during write and it will not interpret the snapshots.
+
+### Reading a 32 bit value
+
+Now lets talk about the pure read() operation. For the read operation, the same principle applies. You need to shift
+in bits into the register to get bits shifted out. The out-shifted bits will appear in the form of snapshots. You have
+to reassemble the value given the snapshots in the queue! The command to read data is also 0x6E (or one of the variants
+depending on which edge is used to supply and produce data).
+
+This time, if we talk about a pure Read() operation, we can shift i 0 values or 1 values. Basically it does not matter
+which data we shift in since the pure Read() is only interested about the snapshot coming out of the register.
+Say we shift in 0 data in order to retrieve the register content.
+This time, in contrast to the Write() operation, there is the possibility to shift out up to 7 values at a time since 
+we can provide the 0 data and 7 values for TMS. Then the FT232h will clock in the 7 TMS values and it will give us
+seven shifted bits!
+
+In terms of snapshots, for a 32 bit value, you have to shift 7-bit, followed by 7-bit, followed by 7-bit and 7-bit and 4-bit.
+7+7+7+7+4 = 32 bit.
+
+This means, you will receive 5 snapshots in the queue.
+
+Here is an example:
+
+Let's say the 32-bit register is preloaded with the value 0x12345678.
+Shifting our 7+7+7+7+4 combo of awesomnes yields the snapshots:
+
+```
+0x12     0x23     0xA2     0x59     0xF0
+```
+
+Lets display the hex numbers as binary numbers:
+
+```
+00010010 00100011 10100010 01011001 11110000
+```
+
+Now you need to know which snapshot has been created by how many bit shifts!
+The wonderfull API does not tell you that at all, you have to remember.
+In our case the combo is fixed for 32 bit values, it is 7+7+7+7+4 so we can
+hardcode this in the routine.
+
+Lets hightlight which bits within the snapshots contain actual data and which bits are left-over data from the last shift:
+
+```
+[0001]0010 [0010001]1 [1010001]0 [0101100]1 [1111000]0
+```
+
+The snapshot on the right has seven bits from the value 0x78 from the original register content shifted in from the left!
+0x78 == 01111000. When you shift 01111000 seven times to the right, you get 1111000. When this value is shifted into the
+8 bit buffer from the right, you get 11110000 and this is the value stored in the snapshot. Only the leftmost 7 bit are
+real and they are marked in the display above.
+
+Likewise, the rest of the 5 snapshots need to interpreted. Now that we know which bits are real per snapshot, we need 
+to combine them to get the original register value.
+
+```
+[0001] [0010001] [1010001] [0101100] [1111000]
+
+ 0001   0010001   1010001   0101100   1111000
+ 
+00010010001101000101011001111000 == 0x12345678
+```
+
+So far so good, we go the original value back! First, unimportant bits are dropped, then the bits are combined and then
+there is the original register content of 0x12345678.
+
+An implementation of this reassembling of the bits is basically your pure Read() function!
+
+Here are the recombinations:
+
+```
+uint32_t value = (((byInputBuffer[4] & 0xF0) >> 4) << 28) 
+	| (((byInputBuffer[3] & 0xFE) >> 1) << 21) 
+	| (((byInputBuffer[2] & 0xFE) >> 1) << 14) 
+	| (((byInputBuffer[1] & 0xFE) >> 1) << 7) 
+	| (((byInputBuffer[0] & 0xFE) >> 1) << 0);
+```
+
+For each snapshot, select the relevant bits using a bitwise AND operation, then shift the bits to the right to
+get rid of the irrelevant bits. Then shift the bits up into their correct values inside the 32 bit number.
+
+### Reading and writing at the same time
+
+If you want to read and write 32 bit values at the same time, you are stuck with 1 bit writes and 32 read snapshots
+because of the ridiculous 1 bit constraint of the 0x6E command!
+
+The upside of this is that you get 32 snapshots, and each 8th snapshot (indexes 7, 15, 23 and 31) contains a byte
+of read data! You need not drop bits, you can just shift these four snapshots together to form a 32 bit value.
+The reason is as each individual bit is shifted into the 8-bit internal buffer, every eight shifts, the internal 
+buffer contains a valid value!
+
+### Summing things up!
+
+This all is so terrible that I have a hunch I might be missing a huge part of the API. Maybe there are
+methods to just read and write data that I have missed! If you know more about the FT232H API, please let 
+me know.
+
+
+
+
+
+
+
+
+
+# RISCV Debug Spec
+
+GPR - general purpose registers
+
+DTM - debug transport module (implemented as JTAG TAP)
+DMI - debug module interface (between DTM and DM). DMI is a bus. The master is the DTM. Participants/slaves are one or more DM. The bus technology is a implementation detail (custom bus or TileLink, AMBA, Wishbone, ...)
+DM - DEBUG Module. Up to 2^20 harts can be connected to a single DM. Commands issued to the DM only apply to the currently selected harts.
+
+TM - trigger module
+
+program buffer (optional) - can be loaded with instructions via jtag. A heart can be told to execute those instructions.
+system bus access block - allows to access memory directly over JTAG
+Trigger Module - each hart has When trigger conditions are met, harts will halt and inform the debug module that they have halted.
+
+
+# Mandatory / Required
+
+1. Give the debugger necessary information about the implementation. (Required)
+2. Allow any individual hart to be halted and resumed. (Required)
+3. Provide status on which harts are halted. (Required)
+4. Provide abstract read and write access to a halted hart’s GPRs. (Required)
+5. Provide access to a reset signal that allows debugging from the very first instruction after reset. (Required)
+
+
+# Plan
+
+1. Let the debugger talk to the Trigger Module and make the CPU halt.
+2. Load instructions into the program buffer
+3. debug the execution of the program buffer
+
+
+
+
+# read IDCODE from the TAP
+
+
+
+
+
+# How does the JTAG TAP talk to the RISCV DM?
+
+RISCV DTM is implemented as JTAG TAP.
+The DM is a separate module. The JTAG TAP / DTM talk to the DM via the DMI.
+
+Let's look at the registers with address 0x10.
+The JTAG TAP / RISCV DTM has a 6.1.4. DTM Control and Status (dtmcs, at 0x10) with address 0x10 defined!
+This register contains information about the version of the DTM.
+
+The DM has a list of register defined in 3.14. Debug Module Registers on page 25.
+The DM itself has it's own register with an address of 0x10: 3.14.2. Debug Module Control (dmcontrol, at 0x10), page 30.
+
+When the JTAG TAP / RISCV DTM and the RISCV DM are distinct modules, how do they interact with each other?
+How can the JTAG TAP / RISCV DTM read and write the dmcontrol, at 0x10 in the DM?
+
+The answer is the JTAG TAP / RISCV DTM's (6.1.5. Debug Module Interface Access (dmi, at 0x11)) register, page 95.
+The dmi register (page 95) is larger than 32 bit. It contains an address field of ?-bit, it contains
+a data field 32 bit wide and a 2 bit op-field. When the address is set to 0x10 and other conditions hold, a
+DMI communication is started and the command register (0x10) on the DM is queried or written.
+
+
+First excercies: Determine HARTSELLEN.
+HARTSELLEN is determined by writing and reading from DM's command register (0x10).
+In order to read/write this register, the JTAG TAP / RISCV DTM's dmi register (0x11) is used.
+TODO:... implement!
+
+
+
+
+
+# Question: How does the DTM talk to the DM over DMI?
+
+The goal is to perform a reset using the ndmreset bit inside a DM's (dmcontrol, 0x10) register.
+
+See: 3.14. Debug Module Registers
+Each DM has a base address (which is 0 for the first DM). The register addresses below are offsets from this base address.
+If the DTM assumes that only a single DM exists, it will use offset address 0x00 to talk to the first DM and it will
+use offsets to determine the addresses of registers (offset: 0x10 is the dmcontrol register for example).
+The DTM then writes to that address or reads from that address. 
+
+## Writing (DTM writes to DM (over DMI))
+
+The write operation depends on the bus technology that is used to implement the DMI bus. 
+As the specification leaves the technology to the implementation, it also does not define how to read or write.
+The spec merely uses the term "write".
+
+This implementation uses JTAG to implement the DTM and wishbone b4 to impement DMI.
+
+PREREQUISIT: The JTAG TAP / RISCV DTMs have a "dmi register". This is a JTAG data register.
+(dmi register :: = 6.1.5. Debug Module Interface Access (dmi, at 0x11)) register, page 95. The dmi register (page 95) is larger than 32 bit.
+
+It contains 
+- an address field of ?-bit
+- a data field 32 bit wide 
+- a 2 bit op-field
+
+We will implement DMI as wisbone b4 bus: https://cdn.opencores.org/downloads/wbspec_b4.pdf
+
+1. The JTAG TAP / DTM is instructed to select the "dmi register (0x11)" register by shifting a custom DMI instruction in the IR register.
+The instruction is 0x11 which is the address of the "dmi register (0x11)".
+
+(INCORRECT: When the address is set to 0x10 and other conditions hold, a
+DMI communication is started and the command register (0x10) inside the first DM is queried or written over DMI.)
+
+2. In the JTAG CAPTURE_DR state with DMI instruction in the IR register, 
+the data lines are copied from the "dmi register (0x11)" into the DMCONTROLS SHIFT REGISTER which does not 
+exist! Instead, there is only a single data shift register reused by all data registers. 
+TODO: Bit widths????
+I think we need a special data shift register for the "dmi register (0x11)" because the "dmi register (0x11)" register
+is larger that 32 bit. It needs it's own custom shift register for the shift register to fit the DMI command.
+
+The first CAPTURE_DR will not contain any usefull data and should be ignored, because no command has been executed yet.
+
+Now it is time to shift in a DMI (Debug Module Interface) command into the data shift register.
+
+During SHIFT_DR, a command that goes into the "dmi register (0x11)" in the JTAG TAP / DTM is shifted in.
+
+This command consists of: 
+- an address on the DMI bus (DM offset + Register offset), (place 0x10 here to access the command register (0x10) in the first DM).
+- data (in the case of WRITE)
+- an op field for WRITE or READ. The op field is described below in more detail.
+
+(INCORRECT: The DTM will place the respective address: offset 0x00 for the 
+first DM and internal offset 0x10 for the dmcontrol register onto the DTM bus address line to select the dmcontrol register in the first DM.)
+(INCORRECT: And the data lines on the DMI bus will display data located inside the dmcontrol register.)
+(INCORRECT: The data of the cmcontrol register immediately appears on the DMI bus data lines.)
+(INCORRECT: This means the IR register is directly connected to the address lines of the DMI bus! 
+The address lines of the DMI bus are connected to the address register of the DM. The DM will immediately 
+present data matching the address on the data lines of the DMI bus.)
+
+3. Now the DMI command is inside the data shift register. The next step will be UPDATE_DR entered from 
+EXIT1_IR or EXIT2_IR depending on which path the state machine takes.
+During UPDATE_DR, the JTAG TAP / DTM will transfer the data from the shift-register into the data-register,
+which actually performs a wishbone operation (READ or WRITE depending on the op bits) in order to talk to the DM.
+--> In the code look for "// on enter: UPDATE_DR from EXIT1_DR" and also "// on enter: UPDATE_DR from EXIT2_DR"
+
+If the two op bits of the dmi command in the shift register are READ (op == 1, see section Section B.2.1 or also page 96), a wishbone READ operation is executed during CAPTURE_DR.
+If the two op bits of the dmi command in the shift register are WRITE (op == 2, see page 96), a wishbone WRITE operation is executed during CAPTURE_DR.
+
+Values for op when the JTAG TAP / DTM wants to execute a command
+
+0 - nop operation
+1 - read
+2 - write
+3 - reserved
+
+Values for op when the JTAG TAP / DTM reads the result of an executed command
+
+0 - (success): The previous operation completed  successfully.
+1 - (reserved): Reserved.
+2 - (failed): A previous operation failed. The data scanned
+	into dmi in this access will be ignored. This status is sticky
+	and can be cleared by writing dmireset in dtmcs.
+	This indicates that the DM itself or the DMI responded
+	with an error. There are no specified cases in which the
+	DM would respond with an error, and DMI is not required
+	to support returning errors.
+	If a debugger sees this status, there might be additional
+	information in errinfo
+3 - (busy): A DMI operation was attempted while a prior
+	DMI operation was still in progress. The data scanned into
+	dmi in this access will be ignored. This status is sticky and
+	can be cleared by writing dmireset in dtmcs. If a debugger
+	sees this status, it needs to give the target more TCK edges
+	between Update-DR and Capture-DR. The simplest way to
+	do that is to add extra transitions in Run-Test/Idle
+
+For a wishbone read or write, the DM is the wishbone slave and the JTAG TAP / DTM is the wishbone master.
+The read will transfer the addressed register content from the DM into the JTAG TAP / DTM.
+
+4. Now the data is stored in the DTM after a read, how is that data transmitted back to the JTAG debugger over JTAG?
+The answer is that the JTAG debugger has to loop back the state machine back to CAPTURE_DR which places the data into 
+the data shift register for the JTAG TAP / DTM to shift out this data to the JTAG debugger. This time around, the
+data is actually valid and should be processed by the JTAG debugger!
+
+See Spec. Page 95: 
+"
+This register allows access to the Debug Module Interface (DMI).
+In Update-DR, the DTM starts the operation specified in op unless the current status reported in op is sticky.
+In Capture-DR, the DTM updates data with the result from that operation, updating op if the current op isn’t sticky.
+See Section B.2.1 for examples of how this is used
+"
+
+Section B.2.1
+
+"
+B.2.1. Debug Module Interface Access
+ 
+To read an arbitrary Debug Module register, select dmi, and scan in a value with op set to 1, and
+address set to the desired register address. In Update-DR the operation will start, and in Capture-DR
+its results will be captured into data. If the operation didn’t complete in time, op will be 3 and the
+value in data must be ignored. The busy condition must be cleared by writing dmireset in dtmcs, and
+then the second scan scan must be performed again. This process must be repeated until op returns 0.
+In later operations the debugger should allow for more time between Update-DR and Capture-DR.
+
+To write an arbitrary Debug Bus register, select dmi, and scan in a value with op set to 2, and address
+and data set to the desired register address and data respectively. From then on everything happens
+exactly as with a read, except that a write is performed instead of the read.
+It should almost never be necessary to scan IR, avoiding a big part of the inefficiency in typical JTAG
+use
+"
+
+
+## Implementation
+
+The task has been split into several parts.
+
+1. Define a DM module with a command register (0x10) (32 bit size)
+2. Define a DTM module with a large data and shift register for the dmi register (0x11)
+3. JTAG: implement usage of the shift and data register for the large "dmi register (0x11)" inside the DTM. Also write a Test using the Ardunio Due.
+   The DTM has to be able to detect that is has to perform a wishbone read or write cycle to the correct address.
+4. Wishbone read and write cycles to read and write data into the DM.
+5. Test read and write data to the DM's command register (0x10).
+
+
+## DTM Reading (DTM reads from DM)
+
+The read operation depends on the bus technology that is used to implement the DMI bus. 
+As the specification leaves the technology to the implementation, it also does not define how to read or write.
+The spec merely uses the term "read".
+
+Reading not separated from writing in JTAG! It is not possible to write without read because there is no transition that 
+jumps over the UPDATE_IR state in the JTAG state machine.
+In order to write the same value back into a register, you will first shift in 32 ones or zeroes (does not matter)
+to read the value. Then once the value is available, shift the value back in the shift register so that it is
+written back during UPDATE_IR! 
+
+This has the effect of just reading a register, because the read value is immediately written back.
+
+I think the general idea is to have a JTAG read-modify-write cyles. read shifts the data out and 0 or 1 in, modifiy takes the
+value and optionally modifies it and write, shifts the data (modified or not) back in.
+
+The first step would be to read and write DM registers over the DTM (= implemented as JTAG TAP) 
+
+
+
+# read misa register (0x301) for xlen
+
+HINT: The misa register is not defined by the debug spec! It is part of some other RISCV extension.
+
+In this section XLEN means MXLEN when in M-mode, and DXLEN when in Debug Mode.
+
+4.7 XLEN
+ 
+While in Debug Mode, XLEN is DXLEN. It is up to the debugger to determine the XLEN during
+normal program execution (by looking at misa) and to clearly communicate this to the user.
+ 
+https://forums.sifive.com/t/what-is-the-right-way-to-read-misa-register/3939/6
+ 
+MISA is a CSR i.e. a special register, not a memory location. 
+CSRs are not memory mapped.
+As with any register, you can not access it using a C pointer. You can only use a CSR machine code instruction.
+
+Remember: When an external debugger reads the misa register, it does not know, what XLEN is yet. 
+This means it does not know how many bits the misa register really has! The information is therefore 
+stored at the leftmost border and at the rightmost border!
+
+The first two (most significant) bits (MXL) contain the XLEN which is decoded using the table below:
+
+| MXL | XLEN |
+| --- | ---- |
+|   1 |   32 |
+|   2 |   64 |
+|   3 |  128 |
+
+
+
+
+# Determine how many harts exist (Determining HARTSEL).
+# HARTSELLEN
+
+HARTSELLEN is the width in bits of the hartsel bits within the (dmcontrol, at 0x10) register.
+hartsel bits are of WARL type.
+WARL ::= Write any, read legal. A debugger may write any value. 
+If a value is unsupported, the implementation converts the value to one that is supported.
+
+A debugger should discover HARTSELLEN by writing all ones to hartsel (assuming the maximum size. This means:
+the debugger should assume that HARTSELLEN is 20 bits (which is the maximum allowed width) reading back the
+value to see which bits were actually set. The read back value has been corrected by the implementation to
+a value that is actually supported because the hartsel bits are of WARL type. This value will be the largest id 
+in the system, i.e. the id of the last hart.
+
+Once HARTSELLEN is known, the debugger can the iterate from 0 to the max value possible with HARTSELLEN bits
+and check each hart's state! This means HARTSELLEN is not the amount of existing harts but it is an
+upper bound for how many harts might exist in the RISCV chip.
+
+# hartsel - selecting harts
+
+hartsel - see section: 3.14.2. Debug Module Control (dmcontrol, at 0x10)
+
+hartsel is not a register. hartsel consists of hartsello and harstelhi which are
+ten bits each and are part of the dmcontrol register. So the harsel bits are embedded
+within the dmcontrol register!
+
+Throughout this document we refer to hartsel, which is hartselhi combined with hartsello. 
+
+While the spec allows for 20 hartsel bits, an implementation may choose to implement fewer than that. 
+
+The actual width of hartsel is called HARTSELLEN. It must be at least 0 and at most 20. 
+This is the reason why a DM can be connected to 2^20 harts. The hartsel register is used to
+select a single hart. This is done by writing the hart's id into hartsel which automatically
+makes that hart the selected one. 
+
+Is the following true or not? Only a single hart can be selected per DM at any point in time.
+See 3.3.2. Selecting Multiple Harts: Unless the DM implements a "Hart Array Mask" register the
+DM can only select a single DM at a time. 
+
+Debuggers must not change hartsel while an abstract command is executing. (This would mean the hart
+is changed while the abstract operation is still running on the old hart!) 
+Hardware should enforce this by ignoring changes to hartsel while busy is set.
+
+
+
+
+
+
+
+
+
+
+### State of a Hart
+
+A hart is in one of the following states 
+
+unavailable - might exist/become available at a later time, or if there are other harts with higher indexes than this one
+
+nonexistent - will never be part of this hardware platform, no matter how long a user waits.
+	Debuggers may assume that a hardware platform has no harts with indexes higher than
+	the first nonexistent one. As soon as the debugger encounters the first nonexistent hart during iteration from
+	0 to HARTSELLEN, it can stop iterating, since there will be no more HARTs.
+
+running - hart is running as if no debugger is connected
+
+halted - halted when they are in Debug Mode, only performing tasks on behalf of the debugger.
+
+The state of a hart is captured in the "Debug Module Status (dmstatus, at 0x11)" register of the DM.
+
+allnonexistent - This field is 1 when all currently selected harts do not exist in this hardware platform.
+anynonexistent - This field is 1 when any currently selected hart does not exist in this hardware platform.
+
+allunavail - This field is 1 when all currently selected harts are unavailable, or (if stickyunavail is 1) were unavailable without that being acknowledged.
+anyunavail - This field is 1 when any currently selected hart is unavailable, or (if stickyunavail is 1) was unavailable without that being acknowledged.
+
+The following bits are also part of the RUN CONTROL state!?! Wierd spec!
+
+allrunning - This field is 1 when all currently selected harts are running.
+anyrunning - This field is 1 when any currently selected hart is running.
+
+allhalted - This field is 1 when all currently selected harts are halted.
+anyhalted - This field is 1 when any currently selected hart is halted.
+
+These eight bits are contained inside the "Debug Module Status (dmstatus, at 0x11)" register.
+See 3.14.1. Debug Module Status (dmstatus, at 0x11)
+
+The confusing part is that those bits are targeted at groups of harts.
+
+The trick is to just select a single individual hart. Now the group of harts consists of exactly a single hart.
+For a single hart, the bits accurately degenerated and acurately describe the { unavailable, nonexistent, running, halted } state
+of that single hart!
+
+
+
+### Hart RUN CONTROL (page 15)
+
+There are four bits used for the communication between a Hart and the DM.
+
+halt request - (optional, resets to 0) - When the debugger writes dmcontrol.haltreq, the 'halt request' bit is set for all selected harts.
+	When a hart's 'halt request' bit is set, the Hart will execute a halt.
+	- When the halt request has been executed by the hart, the hart has to send a "halted" signal to the DM.
+
+resume ack - (mandatory, resets to either 0 or 1) 
+	- When the resume request has been executed by the hart, the hart has to send a "running" signal to the DM.
+
+halt-on reset request - (optional, resets to 0) - 
+
+hart reset - (mandatory, resets to 0) 
+	- When the hart reset has been executed by the hart, the hart has to send a "havereset" signal to the DM.
+
+When a DM controls several harts, it has these four bits for each hart.
+
+On page 23, there is a state machine (on the left of figure 2) that shows the states a hart can be in.
+I think there is a slight error in the diagram. The states Halting and Resuming both have the same
+start and end states in their description (running/halted and running/halted) although they have
+different start and end states!
+
+The states are:
+
+| State Name       | State Description                     | Notes                                           |
+| ---------------- | ------------------------------------- | ----------------------------------------------- |
+| Normal Execution | (Description: state = running)        |                                                 |
+| Halting          | (Description: state = running/halted) |                                                 |
+| Halted           | (Description: state = halted)         |                                                 |
+| Resuming         | (Description: state = running/halted) | Description should be changed to halted/running |
+| Hart Reset       | (Description: state = running)        |                                                 |
+
+Notes: There is no transition into the [Hart Reset] state!
+Basically this state is entered on a reset request from any state!
+
+Transitions:
+
+These bits are part of the "3.14.2. Debug Module Control (dmcontrol, at 0x10)" register. Page 30;
+
+From [Normal Execution] to [Halting]
+	Option 1 - the debugger sets the dmcontrol.haltreq bit. 
+	Option 2 - a software breakpoint happens.
+	Option 3 - single Step happens.
+	Option 4 - trigger with action 1 happens.
+	Option 5 - a halt group is told to halt
+	Option 5 - external trigger happens.
+	====> All the selected hart(s) will receive a halt request and start executing (unless they are currently executing an abstract command)
+
+From [Halting] to [Halted]
+	There is no option to trigger this transition. The hart manages this transition itself by executing a halt request.
+	====> The hart has finished the halt.
+	
+From [Halted] to [Resuming]
+	Option 1 - the debugger sets the dmcontrol.resumereq bit. 
+	Option 2 - a resume groupt is told to resume
+	Option 3 - an external trigger happens.
+	====> All selected hart(s) will receive a resume request and start to resume.
+	
+From [Resuming] to [Normal Execution]
+	There is no option to trigger this transition. The hart manages this transition itself by executing a resume request.
+	====> The hart has resumed.
+	
+From * to [Hart Reset]
+	Option 1 - the debugger writes a 1 into dmcontrol.hartreset. All seleted harts start to reset. The debugger then writes a 0 into dmcontrol.hartreset.
+	====> Harts transition from any state they might have been into the [Hart Reset] state
+	
+From [Hart Reset] to [Normal Execution] and/or [Hart Reset] to [Halted]
+	Option 1 - Once in [Hart Reset], a hart automatically starts to reboot. No signal is required to make it reboot, the hart comes back automatically.
+		If the debugger has set a 1 into dmcontrol.setresethaltreq before, the hart will transition to [Halted].
+		If the debugger has set a 1 into dmcontrol.setresethaltreq and also into dmcontrol.clrresethaltreq,
+		dmcontrol.clrresethaltreq takes precedence and the hart will transition to [Normal Execution]
+		If the debugger has set a 0 into dmcontrol.setresethaltreq and a 1 into dmcontrol.clrresethaltreq, 
+		then the hart will transition to [Normal Execution]
+
+
+
+From the debuggers point of view, the debugger can look at the 3.14.1. Debug Module Status (dmstatus, at 0x11) register.
+It has the following bits:
+
+allhalted - state of the 'halt request' request. 1 if all selected harts have halted.
+anyhalted - state of the 'halt request' request. 1 if any of the selected harts have halted.
+
+allresumeack - state of the 'resume ack' request. 1 if all selected harts have resumed.
+anyresumeack - state of the 'resume ack' request. 1 if any of the selected harts have resumed.
+
+allrunning - if all selected harts are running.
+anyrunning - if any of the selected harts is running.
+
+allhavereset - state of the 'hart reset' request. 1 if all selected harts have reset.
+anyhavereset - state of the 'hart reset' request. 1 if any of the selected harts have reset.
+
+After the reset, a hart might directly start to run or it might halt depending on the state it had before.
+The sticky
+Therefore, the state allrunning, anyrunning are important. They can be used to check if the hart is running
+after reset. If it is not running, a 'resume ack' request can be executed.
+
+
+
+
+
+
+
+
+# Iterating over all harts
+
+Once the debugger knows the highest hart index it has to iterate over all harts to query their state.
+
+The states are:
+non-existent, - Harts are nonexistent if they will never be part of this hardware platform, no matter how long a user waits. 
+unavailable, - Harts are unavailable if they might exist/become available at a later time, or if there are other harts with higher indexes than this one
+running, - Harts are running when they are executing normally, as if no debugger was attached
+or halted - Harts are halted when they are in Debug Mode, only performing tasks on behalf of the debugger.
+
+Which state the selected harts are in, is reflected by:
+
+allnonexistent, - This field is 1 when all currently selected harts do not exist in this hardware platform.
+anynonexistent, - This field is 1 when any currently selected hart does not exist in this hardware platform.
+
+allunavail, - This field is 1 when all currently selected harts are unavailable, or (if stickyunavail is 1) were unavailable without that being acknowledged.
+anyunavail, - This field is 1 when any currently selected hart is unavailable, or (if stickyunavail is 1) was unavailable without that being acknowledged.
+
+allrunning, - This field is 1 when all currently selected harts are running.
+anyrunning, - This field is 1 when any currently selected hart is running.
+
+allhalted, and - This field is 1 when all currently selected harts are halted.
+anyhalted. - This field is 1 when any currently selected hart is halted.
+
+These eight bits are contained inside the "Debug Module Status (dmstatus, at 0x11)" register.
+See 3.14.1. Debug Module Status (dmstatus, at 0x11)
+
+
+
+
+
+
+
+
+
+To enumerate all the harts, a debugger must first determine HARTSELLEN by writing all ones to hartsel
+(assuming the maximum size) and reading back the value to see which bits were actually set. Then it
+selects each hart starting from 0 until either anynonexistent in dmstatus is 1, or the highest index
+(depending on HARTSELLEN) is reached.
+
+
+
+# Halting - page 72
+
+dm.dmcontrol, at 0x10 is a register inside the DM. 
+It can be read and written by the DTM over the dtm.dmi register (0x11) Debug Module Interface Access (dtm.dmi) (0x11)
+
+"
+B.3 Halting
+To halt one or more harts, the debugger selects them, sets dm.dmcontrol.haltreq, and then waits for allhalted to
+indicate the harts are halted. Then it can clear haltreq to 0, or leave it high to catch a hart that
+resets while halted.
+"
+
+
+
+
+
+# Abstract commands
+
+Debuggers execute abstract commands by writing them to command (= 3.12.7 Abstract Command (command, at 0x17) is a register inside the DM.).
+The dm.command register (0x17) is one of the "Debug Module Debug Bus Registers" see table 3.8 on page 20.
+The dm.command register (0x17) has no space defined for arguments to the abstract command.
+
+Page 11:
+If the command takes arguments, the debugger must write them to the data registers before writing to command.
+What are the data registers? See section "3.12.11 Abstract Data 0 (data0, at 0x04)" on page 30.
+
+data 0 through data 11 are basic read/write registers that may be read or changed by abstract commands.
+
+data 0 through data 11 are 32 bit registers.
+
+The data 0 - 11 registers are part of the DM! They are listed in the table 3.8 on page 20.
+
+| Address | Name | Page in Debug Spec |
+| ------- | ---- | ------------------ |
+| 0x04 | Abstract Data 0 (data0) | 30 |
+| 0x0f | Abstract Data 11 (data11) | 30 |
+
+(page 28):
+Writes to this (dm.command register (0x17)) register cause the corresponding abstract command to be executed. 
+If cmderr is non-zero, writes to this register are ignored.
+If cmderr is zero: Writing this register while an abstract command is executing causes cmderr to be set to 1 (busy)
+
+Note about cmderr:
+cmderr inhibits starting a new command to accommodate debuggers that, for performance reasons, 
+send several commands to be executed in a row without checking cmderr in between. 
+They can safely do so and check cmderr at the end without worrying that one command failed but then
+a later command (which might have depended on the previous one succeeding) passed.
+
+dm.command regsiter format:
+
+| Field | Description | Access | Reset |
+| ----- | ----------- | ------ | ----- |
+| cmdtype | The type determines the overall functionality of this abstract command. | W | 0 |
+| control | This field is interpreted in a command-specific manner, described for each abstract command. | W | 0 |
+
+As stated above, potential arguments to the command go into the data 0 - data 11 registers before writing to dm.command!
+The flow is:
+1. Write parameters into data 0 - data 11
+2. Write command into dm.command
+
+## Abstract commands executable via the dm.command register (0x17)
+
+See section "3.6 Abstract Commands" on page 11.
+
+The DM supports a set of abstract commands, most of which are optional.
+
+The list of abstract commands is:
+
+See page: 12
+
+This section describes each of the different abstract commands and how their fields should be
+interpreted when they are written to command.
+
+Each abstract command is a 32-bit value. 
+The top 8 bits contain cmdtype which determines the kind of command. 
+
+Table 3.2 lists all commands.
+
+Table 3.2: Meaning of cmdtype
+
+| cmdtype | Command | Page in Spec Document |
+| ------- | ------- | --------------------- |
+| 0 | Access Register Command | 12 |
+| 1 | Quick Access | 14 |
+| 2 | Access Memory Command | 14 |
+
+
+## Writing Memory through an abstract command
+
+Page 14, 3.6.1.3 Access Memory
+
+"Copy data from the arg0 portion of data into the memory location specified in arg1, if write is set."
+
+For the abstract command "Acces Memory" the command register is used as follows:
+
+| Bit Pos | Width in Bits | Name             | Description |
+| ------- | ------------- | ---------------- | ----------- |
+| 31:24   | 8             | cmdtype          | Write 0x02 here for abstract command: Access Memory |
+| 23      | 1             | aamvirtual       | 0 means no virtual memory translation is used |
+| 22:20   | 3             | aamsize          | 0 - transfer 8 bit, 1 - transfer 16 bit, 2 - transfer 32 bit |
+| 19      | 1             | aampostincrement | After a memory access has completed, if this bit is 1, increment arg1 (which contains the address used) by the number of bytes encoded in aamsize. |
+| 18:17   | 2             | not-used         | |
+| 16      | 1             | write            | 0 - read, 1 - write. For write: data to write is in arg0*, mem-addr to write to is in arg1*. |
+| 15:14   | 2             | target-specific  | These bits are reserved for target-specific uses. |
+| 13:0    | 14            | not-used         | |
+
+* for arg0 and arg1, you need to know the following:
+arg0 and arg1 are names which reference the data registers and combinations thereof!
+Since data registers are 32 bit but the memory write abstract command can be configured to write 64 and even 128 bit values,
+it has to combine several data registers to store the arguments!
+arg0 and arg1 are automatically referencing the right amount of registers to use!
+So in a 32-bit abstract write, arg0 will be just a single data register, and arg1 likewise.
+In a 64-bit abstract write, arg0 will be two registers and arg1 likewise.
+The important part is that arg0 and arg1 explicitly define which of the data registers is used in which case!
+The table 3.1 on page 11 shows the Definition:
+Here is the table 3.1:
+
+Table 3.1: Use of Data Registers
+
+| Argument Width | arg0/return value | arg1         | arg2         |
+| -------------- | ----------------- | ------------ | ------------ |
+| 32             | data0             | data1        | data2        | 
+| 64             | data0, data1      | data2, data3 | data4, data5 |
+| 128            | data0–data3       | data4–data7  | data8–data11 |
+
+32 bit: one data register
+64 bit: two data registers
+128 bit: four data registers
+
+## Steps to write to memory using an abstract command
+
+Assumption: 32 bit case
+You want to write a 32-bit value called "data" in the following to an address called "addr" in the following.
+
+1. copy 32 bit value "data" to arg0 (= dm.data0 register)
+	In order to achieve this, perform a JTAG-write to the DTM's dtm.dmi register (0x11).
+	The 10-bit address will be the address of arg0 == dm.data0 which is 0x04 according to page 20.
+	The 32-bit data will be the data "data" you want to write.
+1. copy target address value "addr" to arg1 (= dm.data1 register)
+	In order to achieve this, perform a JTAG-write to the DTM's dtm.dmi register (0x11).
+	The 10-bit address will be the address of arg1 == dm.data1 which is 0x05 according to page 20.
+	The 32-bit data will be the address "addr" you want to write.
+1. write the abstract command into the dm.command register
+	In order to achieve this, perform a JTAG-write to the DTM's dtm.dmi register (0x11).
+	The 10-bit address will be the address of the dm.command register whi is 0x17 according to page 20.
+	The 32-bit data will be the command that is assembled as explained below:
+
+The abstract command looks like this:
+
+00000010bin				- 0x02 = cmdtype for "access memory"
+0bin 					- no virtual memory translation
+010bin 					- (aamsize) 2dec means 32 bit data transfer
+0bin 					- no postincrement
+00bin 					- not used
+0bin 					- write (1 would be read)
+00bin 					- target specific (not used)
+0000 0000 0000 00bin 	- not used
+
+in total 
+[00000010] [0] [010] [0] [00] [0] [00] [00000000000000]
+00000010 00100000 00000000 00000000
+0000 0010 0010 0000 0000 0000 0000 0000
+00000010001000000000000000000000
+== 0x2200000
+
+# Writing Memory through the system bus
+
+page 76
+"
+B.8 Writing Memory
+B.8.1 Using System Bus Access
+With system bus access, addresses are physical system bus addresses.
+Write a word to memory using system bus access:
+Op
+Address Value
+Comment
+sbdata0 value
+Write sbaddress0 address
+Write
+Write a block of memory using system bus access:
+Op
+Address Value
+Write
+Comment
+Write
+Write
+sbdata0 value0
+sbcs sbaccess = 2, sbautoincrement Turn on autoincrement
+Write sbaddress0 address
+sbdata0 value1
+...
+...
+...
+Write
+sbdata0 valueN
+"
+ 
+ 
+ 
+
+
+# Reseting (see 3.2. Reset Control)
+
+You can reset all harts (toggle the ndmreset bit of dmcontrol, at 0x10) or the selected harts (toggle the hartreset bit of dmcontrol, at 0x10).
+
+- ndmreset 
+ndmreset is a bit inside the "Debug Module Control (dmcontrol, at 0x10)" register of a DM. (See: 3.14.2. Debug Module Control (dmcontrol, at 0x10))
+To perform a hardware platform reset the debugger writes 1, and then writes 0 to deassert the reset.
+ndmreset resets all the harts in the hardware platform, as well as all other parts of the hardware platform except for the Debug Modules, 
+Debug Transport Modules, and Debug Module Interface. 
+Exactly what is affected by this reset is implementation dependent, but it must be possible to debug programs from the first instruction executed.
+To perform either of these resets, the debugger first asserts the bit, and then clears it.  
+
+- hartreset resets all the currently selected harts. In this case an implementation may reset more harts than just the ones that are selected. 
+The debugger can discover which other harts are reset (if any) by selecting them and checking anyhavereset and allhavereset.
+
+See section (3.2. Reset Control) 
+When a hart comes out of reset and haltreq or resethaltreq are set, the hart will immediately enter Debug Mode (halted state).
+Otherwise, if the hart was initially running it will execute normally (running state) and if the hart was initially halted it
+should now be running but may be halted.
+
+This means when a hart comes out of reset it will run unless the haltreq or resethaltreq bits are set.
+haltreq and resethaltreq are part of (dmcontrol, at 0x10).
+
+resethaltreq is an optional internal bit of per-hart state that cannot be read, but can be written with
+setresethaltreq and clrresethaltreq. setresethaltreq and clrresethaltreq are part of (dmcontrol, at 0x10).
+
+haltreq (page 31) is part of dmcontrol, at 0x10, it is WARZ type (Write any, read zero. A debugger may write any value. When read this field returns 0.). 
+Writing 0 clears the halt request bit for all currently selected harts. Halt requests are cancelled.
+Writing 1 sets the halt request bit for all currently selected harts. The harts will halt. They will halt after reset also.
+
+
+### Make a hart reset and halt on the first instruction:
+
+1. First determine HARTSELLEN.
+
+2. Write the ID of a hart into hartsel to select that hart.
+
+3. Set the haltreq bit for the currently selected hart. It will halt.
+
+4. Reset the hart so that it comes back from reset and immediately halts because it has been halted in the last step.
+To reset a the selected harts only, toggle the hartreset bit of dmcontrol, at 0x10.
+
+5. Wait for the bit: allhalted or anyhalted.
+
+Now you can query register values or memory content.
+
+### In order to single step:
+
+See 4.5. Single Step (page 49) 
+An external debugger can cause a halted hart to execute a single instruction or trap and then re-enter
+Debug Mode by setting step before resuming. If step is set when a hart resumes then it will single step,
+regardless of the reason for resuming.
+
+step is a bit inside the Debug Control and Status (dcsr, at 0x7b0) register (page 51ff).
+
+### To resume a hart, (page 15, Run control):
+
+When a debugger writes 1 to resumereq, each selected hart’s resume ack bit is cleared and each
+selected, halted hart is sent a resume request.
+
+resumereq is a bit inside Debug Module Control (dmcontrol, at 0x10)
+
+
+
+
+
+
+
+# When harts have reset
+
+When a hart is done resetting and comes back from reset, it will set havereset.
+havereset is a sticky state bit: "When harts have been reset, they must set a sticky havereset state bit."
+Sticky state means that bit is persisted and it's value survives resets without being altered.
+The stick havereset bit can be used by the debugger to check, which harts it has reset already.
+How is this bit cleared?
+

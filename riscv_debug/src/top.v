@@ -140,17 +140,17 @@ wishbone_dm_slave #(
     //.led_port_o(led), // output to the LEDs port
     .led_port_o(),
 
-    /*
+    /**/
     // printf - enabled
     .send_data(send_data),
     .printf(printf)
-    */
+    
 
-    /**/
+    /*
     // printf - disabled
     .send_data(),
     .printf()
-    
+    */
 
 );
 
@@ -379,17 +379,17 @@ jtag_tap #(
     //.r_led_reg(leds),
     .led_o(led),
 
-    /**/
+    /*
     // printf - enabled
     .send_data(send_data),
     .printf(printf),
-    
+    */
 
-    /*
+    /**/
     // printf - disabled
     .send_data(),
     .printf(),
-*/
+
 
     // when a JTAG command for dmi (0x11) arrives, the JTAG_TAP will
     // output commands to the wishbone master here. The wishbone master
