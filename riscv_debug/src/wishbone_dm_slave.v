@@ -35,11 +35,23 @@ module wishbone_dm_slave
 
 );
 
-localparam ZERO_VALUE = 32'h00;
+localparam ZERO_VALUE = 0;
 
 //
 // DM (RISCV DebugSpec, DM)
 //
+// All the DM's registers are listed table 3.8 on page 20
+//
+
+// dm.data0 (0x04) register, page 30
+localparam ADDRESS_DM_DATA0_REGISTER = 32'h00000004;
+reg [63:0] data0_reg = ZERO_VALUE;
+reg [63:0] data0_reg_old = ZERO_VALUE;
+
+// dm.data1 (0x05) register, page 30
+localparam ADDRESS_DM_DATA1_REGISTER = 32'h00000005;
+reg [63:0] data1_reg = ZERO_VALUE;
+reg [63:0] data1_reg_old = ZERO_VALUE;
 
 // dm.dmcontrol (0x10) register, page 22
 localparam ADDRESS_DM_CONTROL_REGISTER = 32'h00000010;
@@ -72,17 +84,36 @@ localparam WRITE = 2;
 reg [1:0] cur_state = IDLE;
 reg [1:0] next_state;
 
+// print feedback!
+// this block prints feedback only when the register gets a new value
+// Although the register value is update on each write!
 always @(posedge clk_i)
 begin
 
     if (rst_i) 
     begin    
         dmcontrol_reg_old = ZERO_VALUE;
+        data0_reg_old = ZERO_VALUE;
+        data1_reg_old = ZERO_VALUE;
     end
     else
     begin
 
-        if (dmcontrol_reg_old != dmcontrol_reg)
+        if (data0_reg_old != data0_reg)
+        begin
+            data0_reg_old = data0_reg;
+            // DEBUG
+            send_data = { 8'h00 };
+            printf = ~printf;
+        end 
+        else if (data1_reg_old != data1_reg)
+        begin
+            data1_reg_old = data1_reg;
+            // DEBUG
+            send_data = { 8'h01 };
+            printf = ~printf;
+        end
+        else if (dmcontrol_reg_old != dmcontrol_reg)
         begin
 
             //// printf
@@ -97,7 +128,8 @@ begin
                 //send_data = { "HALTREQ            ", 16'h0d0a };
                 //printf = ~printf;
 
-                send_data = { 8'h00 };
+                // DEBUG
+                send_data = { 8'h10 };
             end
             else if (dmcontrol_reg_old[RESUMEREQ] == 1'b1)
             begin
@@ -105,7 +137,8 @@ begin
                 //send_data = { "RESUMEREQ          ", 16'h0d0a };
                 //printf = ~printf;
 
-                send_data = { 8'h01 };
+                // DEBUG
+                send_data = { 8'h11 };
             end
             else if (dmcontrol_reg_old[HARTRESET] == 1'b1)
             begin
@@ -113,7 +146,8 @@ begin
                 //send_data = { "HARTRESET          ", 16'h0d0a };
                 //printf = ~printf;
             
-                send_data = { 8'h02 };
+                // DEBUG
+                send_data = { 8'h12 };
             end
 
             //dmcontrol_reg_old = ZERO_VALUE;
@@ -134,7 +168,9 @@ begin
         // go back to IDLE state
         cur_state = IDLE;
 
-        dmcontrol_reg = ZERO_VALUE;
+        data0_reg = ZERO_VALUE;
+        data1_reg = ZERO_VALUE;
+        dmcontrol_reg = ZERO_VALUE;    
         
         //led_reg = ~6'b000000; // all LEDs off
     end    
@@ -151,24 +187,26 @@ begin
 
             case (addr_i)
 
+                // write dm.data0 (0x04)
+                ADDRESS_DM_DATA0_REGISTER:
+                begin                    
+                    data0_reg = data_i; // store the written value into the data0 register of this DM
+                end
+
+                // write dm.data1 (0x05)
+                ADDRESS_DM_DATA1_REGISTER:
+                begin
+                    data1_reg = data_i; // store the written value into the data1 register of this DM
+                end
+
                 // write dm.dmcontrol (0x11)
                 ADDRESS_DM_CONTROL_REGISTER:
                 begin
-                    // store the written value into the dmcontrol register of this DM
-                    dmcontrol_reg = data_i;
-
-                    //led_reg = ~data_i[5:0];
-
-                    // printf
-                    //send_data <= { "DM_CONTROL         ", 16'h0d0a };
-                    //printf <= ~printf;
+                    dmcontrol_reg = data_i; // store the written value into the dmcontrol register of this DM
                 end
 
                 default:
-                begin
-                    // printf
-                    //send_data <= { "unknown addr_i     ", 16'h0d0a };
-                    //printf <= ~printf;
+                begin                    
                 end
 
             endcase
@@ -223,15 +261,32 @@ begin
                 
                 case (addr_i)
 
+                    ADDRESS_DM_DATA0_REGISTER:
+                    begin
+                        data_o_reg = data0_reg; // present the read data
+                        //// DEBUG
+                        //send_data = { 8'h00 };
+                    end
+
+                    ADDRESS_DM_DATA1_REGISTER:
+                    begin
+                        data_o_reg = data1_reg; // present the read data
+                        //// DEBUG
+                        //send_data = { 8'h01 };
+                    end
+
                     ADDRESS_DM_CONTROL_REGISTER:
                     begin
-                        // present the read data
-                        data_o_reg = dmcontrol_reg;
+                        data_o_reg = dmcontrol_reg; // present the read data
+                        //// DEBUG
+                        //send_data = { 8'h02 };
                     end
 
                     default:
                     begin
                         data_o_reg = ZERO_VALUE;
+                        //// DEBUG
+                        //send_data = { 8'hFF };
                     end
 
                 endcase
@@ -268,10 +323,22 @@ begin
 
                 case (addr_i)
 
+                    ADDRESS_DM_DATA0_REGISTER:
+                    begin
+                        // data is stored inside the next state logic
+                        data_o_reg = data0_reg; // present the read data (this is basically a read operation!)
+                    end
+
+                    ADDRESS_DM_DATA1_REGISTER:
+                    begin
+                        // data is stored inside the next state logic
+                        data_o_reg = data1_reg; // present the read data (this is basically a read operation!)
+                    end
+
                     ADDRESS_DM_CONTROL_REGISTER:
                     begin
-                        // present the read data (this is basically a read operation!)
-                        data_o_reg = dmcontrol_reg;
+                        // data is stored inside the next state logic
+                        data_o_reg = dmcontrol_reg; // present the read data (this is basically a read operation!)
                     end
 
                     default:

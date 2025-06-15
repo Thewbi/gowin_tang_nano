@@ -7,6 +7,27 @@
     <FileList>
         <File path="src/debounce_switch.v" type="file.verilog" enable="1"/>
         <File path="src/jtag_tap.v" type="file.verilog" enable="1"/>
+        <File path="src/riscv_single/adder.v" type="file.verilog" enable="1"/>
+        <File path="src/riscv_single/alu.v" type="file.verilog" enable="1"/>
+        <File path="src/riscv_single/aludec.v" type="file.verilog" enable="1"/>
+        <File path="src/riscv_single/controller.v" type="file.verilog" enable="1"/>
+        <File path="src/riscv_single/datapath.v" type="file.verilog" enable="1"/>
+        <File path="src/riscv_single/debounce_switch.v" type="file.verilog" enable="1"/>
+        <File path="src/riscv_single/dmem.v" type="file.verilog" enable="1"/>
+        <File path="src/riscv_single/extend.v" type="file.verilog" enable="1"/>
+        <File path="src/riscv_single/flopenr.v" type="file.verilog" enable="1"/>
+        <File path="src/riscv_single/flopr.v" type="file.verilog" enable="1"/>
+        <File path="src/riscv_single/imem.v" type="file.verilog" enable="1"/>
+        <File path="src/riscv_single/maindec.v" type="file.verilog" enable="1"/>
+        <File path="src/riscv_single/mux2.v" type="file.verilog" enable="1"/>
+        <File path="src/riscv_single/mux3.v" type="file.verilog" enable="1"/>
+        <File path="src/riscv_single/regfile.v" type="file.verilog" enable="1"/>
+        <File path="src/riscv_single/riscvsingle.v" type="file.verilog" enable="1"/>
+        <File path="src/riscv_single/testbench.v" type="file.verilog" enable="1"/>
+        <File path="src/riscv_single/top.v" type="file.verilog" enable="1"/>
+        <File path="src/riscv_single/uart_controller.v" type="file.verilog" enable="1"/>
+        <File path="src/riscv_single/uart_rx.v" type="file.verilog" enable="1"/>
+        <File path="src/riscv_single/uart_tx.v" type="file.verilog" enable="1"/>
         <File path="src/top.v" type="file.verilog" enable="1"/>
         <File path="src/uart_controller.v" type="file.verilog" enable="1"/>
         <File path="src/uart_rx.v" type="file.verilog" enable="1"/>

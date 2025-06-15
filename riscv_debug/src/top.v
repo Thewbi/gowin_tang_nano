@@ -35,14 +35,14 @@ module top(
 
 
 //reg  r_Switch_1 = 1'b0;
-wire w_Switch_1;
+wire debounced_sys_rst_n_wire;
 
 // Instantiate Debounce Module
-Debounce_Switch debounce_jtag_clk
+Debounce_Switch debounce_sys_rst_n
 (
     .i_Clk(sys_clk), 
-    .i_Switch(jtag_clk),
-    .o_Switch(w_Switch_1)
+    .i_Switch(sys_rst_n),
+    .o_Switch(debounced_sys_rst_n_wire)
 );
 
 
@@ -63,6 +63,20 @@ wire [DATA_NUM * 8 - 1:0] send_data; // bits to send
 //reg printf = 1'b0;
 wire printf;
 
+//
+// RISCV CPU
+//
+
+reg [31:0] PC_reg;
+wire [31:0] PC;
+assign PC = PC_reg;
+
+reg [31:0] Instr_reg;
+wire [31:0] Instr;
+assign Instr = Instr_reg;
+
+// instruction memory
+imem imem(debounced_sys_rst_n_wire, PC, Instr);
 
 /**/
 //
