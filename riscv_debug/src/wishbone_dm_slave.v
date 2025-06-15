@@ -46,17 +46,20 @@ localparam ZERO_VALUE = 0;
 // dm.data0 (0x04) register, page 30
 localparam ADDRESS_DM_DATA0_REGISTER = 32'h00000004;
 reg [63:0] data0_reg = ZERO_VALUE;
-reg [63:0] data0_reg_old = ZERO_VALUE;
+reg data0_reg_updated = ZERO_VALUE;
+reg data0_reg_updated_old = ZERO_VALUE;
 
 // dm.data1 (0x05) register, page 30
 localparam ADDRESS_DM_DATA1_REGISTER = 32'h00000005;
 reg [63:0] data1_reg = ZERO_VALUE;
-reg [63:0] data1_reg_old = ZERO_VALUE;
+reg data1_reg_updated = ZERO_VALUE;
+reg data1_reg_updated_old = ZERO_VALUE;
 
 // dm.dmcontrol (0x10) register, page 22
 localparam ADDRESS_DM_CONTROL_REGISTER = 32'h00000010;
-reg [63:0] dmcontrol_reg = ZERO_VALUE;
-reg [63:0] dmcontrol_reg_old = ZERO_VALUE;
+reg [63:0] control_reg = ZERO_VALUE;
+reg control_reg_updated = ZERO_VALUE;
+reg control_reg_updated_old = ZERO_VALUE;
 
 localparam HALTREQ = 31;
 localparam RESUMEREQ = 30;
@@ -65,6 +68,8 @@ localparam HARTRESET = 29;
 //
 // WISHBONE
 // 
+
+reg transaction_done = 0; // only perform a reaction to a write operation once
 
 reg [5:0] led_reg = ~6'h00;
 assign led_port_o = ~led_reg;
@@ -92,37 +97,37 @@ begin
 
     if (rst_i) 
     begin    
-        dmcontrol_reg_old = ZERO_VALUE;
-        data0_reg_old = ZERO_VALUE;
-        data1_reg_old = ZERO_VALUE;
+        control_reg_updated_old = ZERO_VALUE;
+        data0_reg_updated_old = ZERO_VALUE;
+        data1_reg_updated_old = ZERO_VALUE;
     end
     else
     begin
 
-        if (data0_reg_old != data0_reg)
+        if (data0_reg_updated_old != data0_reg_updated)
         begin
-            data0_reg_old = data0_reg;
+            data0_reg_updated_old = data0_reg_updated;
             // DEBUG
             send_data = { 8'h00 };
             printf = ~printf;
         end 
-        else if (data1_reg_old != data1_reg)
+        else if (data1_reg_updated_old != data1_reg_updated)
         begin
-            data1_reg_old = data1_reg;
+            data1_reg_updated_old = data1_reg_updated;
             // DEBUG
             send_data = { 8'h01 };
             printf = ~printf;
         end
-        else if (dmcontrol_reg_old != dmcontrol_reg)
+        else if (control_reg_updated_old != control_reg_updated)
         begin
 
             //// printf
             //send_data <= { "CHANGE             ", 16'h0d0a };
             //printf <= ~printf;
 
-            dmcontrol_reg_old = dmcontrol_reg;
+            control_reg_updated_old = control_reg_updated;
 
-            if (dmcontrol_reg_old[HALTREQ] == 1'b1)
+            if (control_reg[HALTREQ] == 1'b1)
             begin
                 //// printf
                 //send_data = { "HALTREQ            ", 16'h0d0a };
@@ -131,7 +136,7 @@ begin
                 // DEBUG
                 send_data = { 8'h10 };
             end
-            else if (dmcontrol_reg_old[RESUMEREQ] == 1'b1)
+            else if (control_reg[RESUMEREQ] == 1'b1)
             begin
                 //// printf
                 //send_data = { "RESUMEREQ          ", 16'h0d0a };
@@ -140,7 +145,7 @@ begin
                 // DEBUG
                 send_data = { 8'h11 };
             end
-            else if (dmcontrol_reg_old[HARTRESET] == 1'b1)
+            else if (control_reg[HARTRESET] == 1'b1)
             begin
                 //// printf
                 //send_data = { "HARTRESET          ", 16'h0d0a };
@@ -170,7 +175,7 @@ begin
 
         data0_reg = ZERO_VALUE;
         data1_reg = ZERO_VALUE;
-        dmcontrol_reg = ZERO_VALUE;    
+        control_reg = ZERO_VALUE;    
         
         //led_reg = ~6'b000000; // all LEDs off
     end    
@@ -191,18 +196,21 @@ begin
                 ADDRESS_DM_DATA0_REGISTER:
                 begin                    
                     data0_reg = data_i; // store the written value into the data0 register of this DM
+                    //data0_reg_updated = ~data0_reg_updated;
                 end
 
                 // write dm.data1 (0x05)
                 ADDRESS_DM_DATA1_REGISTER:
                 begin
                     data1_reg = data_i; // store the written value into the data1 register of this DM
+                    //data1_reg_updated = ~data1_reg_updated;
                 end
 
                 // write dm.dmcontrol (0x11)
                 ADDRESS_DM_CONTROL_REGISTER:
                 begin
-                    dmcontrol_reg = data_i; // store the written value into the dmcontrol register of this DM
+                    control_reg = data_i; // store the written value into the dmcontrol register of this DM
+                    //control_reg_updated = ~control_reg_updated;
                 end
 
                 default:
@@ -217,8 +225,10 @@ begin
 end
 
 // combinational always block for next state logic
-always @(*)
+always @(posedge clk_i)
 begin
+
+    
 
     case (cur_state)
 
@@ -227,6 +237,9 @@ begin
             // reset
             data_o_reg = ZERO_VALUE;
             ack_o_reg = 0;
+            transaction_done = 0; // reset because no write operation has completed yet
+
+            //control_reg_updated = control_reg_updated;
             
             // master starts a transaction
             if (cyc_i == 1 && stb_i == 1)
@@ -244,16 +257,12 @@ begin
             begin
                 next_state = IDLE;
             end
-
-            //led_reg = ~6'b000001;
-
-            //// printf - does not work because this state machine is not clocked
-            //send_data <= { "IDLE               ", 16'h0d0a };
-            //printf <= ~printf;
         end
 
         READ:
         begin
+            //control_reg_updated = control_reg_updated;
+
             // The slave will keep ACK_I asserted until the master negates 
             // [STB_O] and [CYC_O] to indicate the end of the cycle.
             if (cyc_i == 1 || stb_i == 1)
@@ -264,33 +273,26 @@ begin
                     ADDRESS_DM_DATA0_REGISTER:
                     begin
                         data_o_reg = data0_reg; // present the read data
-                        //// DEBUG
-                        //send_data = { 8'h00 };
                     end
 
                     ADDRESS_DM_DATA1_REGISTER:
                     begin
                         data_o_reg = data1_reg; // present the read data
-                        //// DEBUG
-                        //send_data = { 8'h01 };
                     end
 
                     ADDRESS_DM_CONTROL_REGISTER:
                     begin
-                        data_o_reg = dmcontrol_reg; // present the read data
-                        //// DEBUG
-                        //send_data = { 8'h02 };
+                        data_o_reg = control_reg; // present the read data
                     end
 
                     default:
                     begin
                         data_o_reg = ZERO_VALUE;
-                        //// DEBUG
-                        //send_data = { 8'hFF };
                     end
 
                 endcase
 
+                // acknowledge read
                 ack_o_reg = 1;
 
                 next_state = cur_state;
@@ -302,17 +304,11 @@ begin
 
                 next_state = IDLE;
             end
-
-            //led_reg = ~6'b000010;
-
-            //// printf - does not work because this state machine is not clocked
-            //send_data <= { "READ               ", 16'h0d0a };
-            //printf <= ~printf;
         end
 
         WRITE:
         begin
-            //data_o_reg = ZERO_VALUE;
+            //control_reg_updated = control_reg_updated;
 
             // The slave will keep ACK_I asserted until the master negates 
             // [STB_O] and [CYC_O] to indicate the end of the cycle.
@@ -338,7 +334,7 @@ begin
                     ADDRESS_DM_CONTROL_REGISTER:
                     begin
                         // data is stored inside the next state logic
-                        data_o_reg = dmcontrol_reg; // present the read data (this is basically a read operation!)
+                        data_o_reg = control_reg; // present the read data (this is basically a read operation!)
                     end
 
                     default:
@@ -348,7 +344,42 @@ begin
 
                 endcase
 
+                // acknowledge write
                 ack_o_reg = 1;
+
+                // only if there has not been a reaction to the latest finished write transaction, perform a reaction
+                if (transaction_done == 0)
+                begin
+                    transaction_done = 1; // buffer the reaction in order to not repeat it again
+                    case (addr_i)
+
+                        // write dm.data0 (0x04)
+                        ADDRESS_DM_DATA0_REGISTER:
+                        begin                    
+                            //data0_reg = data_i; // store the written value into the data0 register of this DM
+                            data0_reg_updated = ~data0_reg_updated;
+                        end
+
+                        // write dm.data1 (0x05)
+                        ADDRESS_DM_DATA1_REGISTER:
+                        begin
+                            //data1_reg = data_i; // store the written value into the data1 register of this DM
+                            data1_reg_updated = ~data1_reg_updated;
+                        end
+
+                        // write dm.dmcontrol (0x11)
+                        ADDRESS_DM_CONTROL_REGISTER:
+                        begin
+                            //control_reg = data_i; // store the written value into the dmcontrol register of this DM
+                            control_reg_updated = ~control_reg_updated;
+                        end
+
+                        default:
+                        begin                    
+                        end
+
+                    endcase
+                end
 
                 next_state = cur_state;
             end
@@ -360,26 +391,16 @@ begin
 
                 next_state = IDLE;
             end
-
-            //led_reg = ~6'b000011;
-
-            //// printf - does not work because this state machine is not clocked
-            //send_data <= { "WRITE              ", 16'h0d0a };
-            //printf <= ~printf;
         end
 
         default:
         begin
+            //control_reg_updated = control_reg_updated;
+
             data_o_reg = ~32'b00;
             ack_o_reg = 0;
 
             next_state = cur_state;
-
-            //led_reg = ~6'b000100;
-
-            //// printf - does not work because this state machine is not clocked
-            //send_data <= { "default             ", 16'h0d0a };
-            //printf <= ~printf;
         end
 
     endcase

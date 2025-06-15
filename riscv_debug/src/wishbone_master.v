@@ -27,6 +27,11 @@ module wishbone_master
 
 );
 
+reg start_read_transaction_i_reg = 0;
+reg start_read_transaction_i_reg_old = 0;
+reg start_write_transaction_i_reg = 0;
+reg start_write_transaction_i_reg_old = 0;
+
 reg we_o_reg = 0;
 assign we_o = we_o_reg;
 
@@ -70,6 +75,36 @@ begin
   
 end
 
+// latch the READ, WRITE command signals
+// this master performs a READ, WRITE cycle only once
+// when the command signals change! In order to restart,
+// shortly set READ=0 and WRITE=0, so that your new command is latched and executed!
+always @(posedge clk_i) 
+begin
+
+    // only latch on change
+    if (start_read_transaction_i_reg_old != start_read_transaction_i)
+    begin
+        start_read_transaction_i_reg_old = start_read_transaction_i;
+        start_read_transaction_i_reg = start_read_transaction_i;
+    end
+
+    // only latch on change
+    if (start_write_transaction_i_reg_old != start_write_transaction_i)
+    begin
+        start_write_transaction_i_reg_old = start_write_transaction_i;
+        start_write_transaction_i_reg = start_write_transaction_i;
+    end
+
+    // reset internal state to stop the transactions, when the slave has acknowledged
+    if (ack_i == 1)
+    begin
+        start_read_transaction_i_reg = 0;
+        start_write_transaction_i_reg = 0;
+    end
+
+end
+
 // combinational always block for next state logic
 always @(*)
 begin
@@ -83,12 +118,12 @@ begin
             cyc_o = 0;
             stb_o = 0;
 
-            if (start_read_transaction_i == 1)
+            if (start_read_transaction_i_reg == 1)
             begin
                 next_state = INIT_READ;
                 we_o_reg = 0;
             end
-            else if (start_write_transaction_i == 1)
+            else if (start_write_transaction_i_reg == 1)
             begin
                 next_state = INIT_WRITE;
                 we_o_reg = 1;
@@ -149,7 +184,7 @@ begin
             // latch the data read from the slave
             read_transaction_data_o_reg = data_i;
 
-            if (start_read_transaction_i == 0)
+            if (start_read_transaction_i_reg == 0)
             begin
                 // tell the slave to deassert ack
                 // strobe/phase and cycle are synonyms for standard, non-pipelined operations
@@ -174,7 +209,7 @@ begin
             // latch the data read from the slave
             read_transaction_data_o_reg = ~32'h00;
 
-            if (start_write_transaction_i == 0)
+            if (start_write_transaction_i_reg == 0)
             begin
                 // tell the slave to deassert ack
                 // strobe/phase and cycle are synonyms for standard, non-pipelined operations
