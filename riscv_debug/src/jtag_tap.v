@@ -184,8 +184,6 @@ begin
     ////send_data <= { "-             ", 16'h0d0a };
     //printf <= ~printf;
 
-    
-
     case (cur_state)
         
         // 11d = 0x0B = b1011

@@ -55,11 +55,17 @@ reg [63:0] data1_reg = ZERO_VALUE;
 reg data1_reg_updated = ZERO_VALUE;
 reg data1_reg_updated_old = ZERO_VALUE;
 
-// dm.dmcontrol (0x10) register, page 22
+// dm.control (0x10) register, page 22
 localparam ADDRESS_DM_CONTROL_REGISTER = 32'h00000010;
 reg [63:0] control_reg = ZERO_VALUE;
 reg control_reg_updated = ZERO_VALUE;
 reg control_reg_updated_old = ZERO_VALUE;
+
+// dm.command (0x17) register, page 28
+localparam ADDRESS_DM_COMMAND_REGISTER = 32'h00000017;
+reg [63:0] command_reg = ZERO_VALUE;
+reg command_reg_updated = ZERO_VALUE;
+reg command_reg_updated_old = ZERO_VALUE;
 
 localparam HALTREQ = 31;
 localparam RESUMEREQ = 30;
@@ -89,81 +95,82 @@ localparam WRITE = 2;
 reg [1:0] cur_state = IDLE;
 reg [1:0] next_state;
 
-// print feedback!
+// print feedback and execute command (0x17)
+//
 // this block prints feedback only when the register gets a new value
 // Although the register value is update on each write!
 always @(posedge clk_i)
 begin
 
     if (rst_i) 
-    begin    
-        control_reg_updated_old = ZERO_VALUE;
+    begin
+        // STEP 1 - add line for new register here        
         data0_reg_updated_old = ZERO_VALUE;
         data1_reg_updated_old = ZERO_VALUE;
+        control_reg_updated_old = ZERO_VALUE;
+        command_reg_updated_old = ZERO_VALUE;
     end
     else
     begin
 
+        // STEP 2 - add branch for new register here
+
+        // dm.data0 (0x04)
         if (data0_reg_updated_old != data0_reg_updated)
         begin
             data0_reg_updated_old = data0_reg_updated;
-            // DEBUG
-            send_data = { 8'h00 };
-            printf = ~printf;
-        end 
+
+            //// DEBUG
+            //send_data = { 8'h04 };
+            //printf = ~printf;
+        end
+        // dm.data1 (0x05)
         else if (data1_reg_updated_old != data1_reg_updated)
         begin
             data1_reg_updated_old = data1_reg_updated;
-            // DEBUG
-            send_data = { 8'h01 };
-            printf = ~printf;
+
+            //// DEBUG
+            //send_data = { 8'h05 };
+            //printf = ~printf;
         end
+        // dm.control (0x10)
         else if (control_reg_updated_old != control_reg_updated)
         begin
-
-            //// printf
-            //send_data <= { "CHANGE             ", 16'h0d0a };
-            //printf <= ~printf;
-
             control_reg_updated_old = control_reg_updated;
 
             if (control_reg[HALTREQ] == 1'b1)
             begin
-                //// printf
-                //send_data = { "HALTREQ            ", 16'h0d0a };
-                //printf = ~printf;
-
-                // DEBUG
-                send_data = { 8'h10 };
+                //// DEBUG
+                //send_data = { 8'h10 };
             end
             else if (control_reg[RESUMEREQ] == 1'b1)
             begin
-                //// printf
-                //send_data = { "RESUMEREQ          ", 16'h0d0a };
-                //printf = ~printf;
-
-                // DEBUG
-                send_data = { 8'h11 };
+                //// DEBUG
+                //send_data = { 8'h11 };
             end
             else if (control_reg[HARTRESET] == 1'b1)
             begin
-                //// printf
-                //send_data = { "HARTRESET          ", 16'h0d0a };
-                //printf = ~printf;
-            
-                // DEBUG
-                send_data = { 8'h12 };
+                //// DEBUG
+                //send_data = { 8'h12 };
             end
 
-            //dmcontrol_reg_old = ZERO_VALUE;
-
-            printf = ~printf;
+            //// DEBUG
+            //printf = ~printf;
             
+        end
+        // dm.command (0x17)
+        else if (command_reg_updated_old != command_reg_updated)
+        begin
+            command_reg_updated_old = command_reg_updated;
+
+            //// DEBUG
+            //send_data = { 8'h17 };
+            //printf = ~printf;
         end
     end
 end
 
-// next state logic
+// next state logic + write operation
 always @(posedge clk_i) 
 begin
     
@@ -173,11 +180,11 @@ begin
         // go back to IDLE state
         cur_state = IDLE;
 
+        // STEP 3 - add line for new register here
         data0_reg = ZERO_VALUE;
         data1_reg = ZERO_VALUE;
-        control_reg = ZERO_VALUE;    
-        
-        //led_reg = ~6'b000000; // all LEDs off
+        control_reg = ZERO_VALUE;
+        command_reg = ZERO_VALUE; 
     end    
     else 
     begin
@@ -190,27 +197,31 @@ begin
         if ((cur_state == WRITE) && (cyc_i == 1 && stb_i == 1))
         begin
 
+            // STEP 4 - add line for new register here
             case (addr_i)
 
                 // write dm.data0 (0x04)
                 ADDRESS_DM_DATA0_REGISTER:
                 begin                    
                     data0_reg = data_i; // store the written value into the data0 register of this DM
-                    //data0_reg_updated = ~data0_reg_updated;
                 end
 
                 // write dm.data1 (0x05)
                 ADDRESS_DM_DATA1_REGISTER:
                 begin
                     data1_reg = data_i; // store the written value into the data1 register of this DM
-                    //data1_reg_updated = ~data1_reg_updated;
                 end
 
                 // write dm.dmcontrol (0x11)
                 ADDRESS_DM_CONTROL_REGISTER:
                 begin
-                    control_reg = data_i; // store the written value into the dmcontrol register of this DM
-                    //control_reg_updated = ~control_reg_updated;
+                    control_reg = data_i; // store the written value into the control register of this DM
+                end
+
+                // write dm.dmcontrol (0x17)
+                ADDRESS_DM_COMMAND_REGISTER:
+                begin
+                    command_reg = data_i; // store the written value into the command register of this DM
                 end
 
                 default:
@@ -220,6 +231,7 @@ begin
             endcase
 
         end
+
     end
 
 end
@@ -227,8 +239,6 @@ end
 // combinational always block for next state logic
 always @(posedge clk_i)
 begin
-
-    
 
     case (cur_state)
 
@@ -239,8 +249,6 @@ begin
             ack_o_reg = 0;
             transaction_done = 0; // reset because no write operation has completed yet
 
-            //control_reg_updated = control_reg_updated;
-            
             // master starts a transaction
             if (cyc_i == 1 && stb_i == 1)
             begin
@@ -261,28 +269,52 @@ begin
 
         READ:
         begin
-            //control_reg_updated = control_reg_updated;
-
             // The slave will keep ACK_I asserted until the master negates 
             // [STB_O] and [CYC_O] to indicate the end of the cycle.
             if (cyc_i == 1 || stb_i == 1)
             begin
                 
+                // STEP 5 - add line for new register here
                 case (addr_i)
 
+                    // dm.data0 (0x04)
                     ADDRESS_DM_DATA0_REGISTER:
                     begin
                         data_o_reg = data0_reg; // present the read data
+
+                        // DEBUG
+                        send_data = { 8'h30 };
+                        printf = ~printf;
                     end
 
+                    // dm.data1 (0x05)
                     ADDRESS_DM_DATA1_REGISTER:
                     begin
                         data_o_reg = data1_reg; // present the read data
+
+                        // DEBUG
+                        send_data = { 8'h31 };
+                        printf = ~printf;
                     end
 
+                    // dm.control (0x10)
                     ADDRESS_DM_CONTROL_REGISTER:
                     begin
                         data_o_reg = control_reg; // present the read data
+
+                        // DEBUG
+                        send_data = { 8'h32 };
+                        printf = ~printf;
+                    end
+
+                    // dm.command (0x17)
+                    ADDRESS_DM_COMMAND_REGISTER:
+                    begin
+                        data_o_reg = command_reg; // present the read data
+
+                        // DEBUG
+                        send_data = { 8'h33 };
+                        printf = ~printf;
                     end
 
                     default:
@@ -308,8 +340,6 @@ begin
 
         WRITE:
         begin
-            //control_reg_updated = control_reg_updated;
-
             // The slave will keep ACK_I asserted until the master negates 
             // [STB_O] and [CYC_O] to indicate the end of the cycle.
             //
@@ -317,24 +347,35 @@ begin
             if (cyc_i == 1 || stb_i == 1)
             begin
 
+                // STEP 6 - add line for new register here
                 case (addr_i)
 
+                    // 0x04
                     ADDRESS_DM_DATA0_REGISTER:
                     begin
                         // data is stored inside the next state logic
                         data_o_reg = data0_reg; // present the read data (this is basically a read operation!)
                     end
 
+                    // 0x05
                     ADDRESS_DM_DATA1_REGISTER:
                     begin
                         // data is stored inside the next state logic
                         data_o_reg = data1_reg; // present the read data (this is basically a read operation!)
                     end
 
+                    // 0x10
                     ADDRESS_DM_CONTROL_REGISTER:
                     begin
                         // data is stored inside the next state logic
                         data_o_reg = control_reg; // present the read data (this is basically a read operation!)
+                    end
+
+                    // 0x17
+                    ADDRESS_DM_COMMAND_REGISTER:
+                    begin
+                        // data is stored inside the next state logic
+                        data_o_reg = command_reg; // present the read data (this is basically a read operation!)
                     end
 
                     default:
@@ -351,27 +392,32 @@ begin
                 if (transaction_done == 0)
                 begin
                     transaction_done = 1; // buffer the reaction in order to not repeat it again
+
+                    // STEP 7 - add line for new register here
                     case (addr_i)
 
                         // write dm.data0 (0x04)
                         ADDRESS_DM_DATA0_REGISTER:
                         begin                    
-                            //data0_reg = data_i; // store the written value into the data0 register of this DM
                             data0_reg_updated = ~data0_reg_updated;
                         end
 
                         // write dm.data1 (0x05)
                         ADDRESS_DM_DATA1_REGISTER:
                         begin
-                            //data1_reg = data_i; // store the written value into the data1 register of this DM
                             data1_reg_updated = ~data1_reg_updated;
                         end
 
-                        // write dm.dmcontrol (0x11)
+                        // write dm.control (0x11)
                         ADDRESS_DM_CONTROL_REGISTER:
                         begin
-                            //control_reg = data_i; // store the written value into the dmcontrol register of this DM
                             control_reg_updated = ~control_reg_updated;
+                        end
+
+                        // write dm.command (0x17)
+                        ADDRESS_DM_COMMAND_REGISTER:
+                        begin
+                            command_reg_updated = ~command_reg_updated;
                         end
 
                         default:
@@ -395,8 +441,6 @@ begin
 
         default:
         begin
-            //control_reg_updated = control_reg_updated;
-
             data_o_reg = ~32'b00;
             ack_o_reg = 0;
 

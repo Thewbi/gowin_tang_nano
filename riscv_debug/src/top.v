@@ -415,6 +415,4 @@ jtag_tap #(
 
 );
 
-
-
 endmodule
