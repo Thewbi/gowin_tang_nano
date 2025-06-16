@@ -1,4 +1,7 @@
 module wishbone_master 
+#(
+    parameter DATA_NUM = 16
+)
 (
 
     // input
@@ -6,8 +9,8 @@ module wishbone_master
 	input wire rst_i, // asynchronous reset input, low active
 
     // input master
-    input wire [63:0] data_i,
-    input wire ack_i,
+    input wire [63:0] data_i, // the slave places read data here
+    input wire ack_i, // the slave acknowledges here
 
     // input wbi custom
     input wire start_read_transaction_i,
@@ -18,12 +21,17 @@ module wishbone_master
     // output master
     output wire [31:0] addr_o,
     output wire we_o,
-    output wire [63:0] data_o,
+    output wire [63:0] data_o, 
     output reg cyc_o,
     output reg stb_o,
 
     // output wbi custom
-    output wire [63:0] read_transaction_data_o
+    output wire [63:0] read_transaction_data_o, // data read from the slave is output here
+
+    // printf - needs to be enabled in top module by assigning values to these two ports
+    // does not work because this state machine is not clocked and this causes a cycle in the tree
+    output reg [DATA_NUM * 8 - 1:0] send_data, // printf debugging over UART
+    output reg printf // printf debugging over UART
 
 );
 
@@ -35,17 +43,13 @@ reg start_write_transaction_i_reg_old = 0;
 reg we_o_reg = 0;
 assign we_o = we_o_reg;
 
-//reg [31:0] addr_reg = 32'h00;
-//assign addr_o = addr_reg;
 assign addr_o = transaction_addr; // just loop the address through
 
 // determines which byte the master transmits on a write transaction
-//reg [31:0] write_data = 32'h00;
-//assign data_o = write_data;
-assign data_o = write_transaction_data_i;
+assign data_o = write_transaction_data_i; 
 
 reg [63:0] read_transaction_data_o_reg;
-assign read_transaction_data_o = read_transaction_data_o_reg;
+assign read_transaction_data_o = read_transaction_data_o_reg; // just loop the slave read data out on read_transaction_data_o
 
 localparam IDLE = 0;
 localparam INIT_READ = 1;
@@ -99,6 +103,15 @@ begin
     // reset internal state to stop the transactions, when the slave has acknowledged
     if (ack_i == 1)
     begin
+
+        // this is the end of a read cycle, data_i contains the read data from the slave
+        if (start_read_transaction_i_reg == 1)
+        begin
+            // DEBUG printf
+            send_data = { 8'h66 };
+            printf = ~printf;
+        end
+
         start_read_transaction_i_reg = 0;
         start_write_transaction_i_reg = 0;
     end

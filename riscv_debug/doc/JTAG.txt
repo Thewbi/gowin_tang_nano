@@ -1434,9 +1434,10 @@ Assumption: 32 bit case
 You want to read a 32-bit value (called "data" in the following) from an address (called "addr" in the following).
 
 1. copy memory address value "addr" to arg1 (= dm.data1 register)
-	In order to achieve this, perform a JTAG-write to the DTM's dtm.dmi register (0x11).
-	The 10-bit address will be the address of arg1 == dm.data1 which is 0x05 according to page 20.
-	The 32-bit data will be the address "addr" you want to read from.
+In order to achieve this, perform a JTAG-write to the DTM's dtm.dmi register (0x11).
+The 10-bit address will be the address of arg1 == dm.data1 which is 0x05 according to page 20.
+The 32-bit data will be the address "addr" you want to read from.
+The last two bit are 10 for write
 
 TODO THis is the next step! TODO THis is the next step! TODO THis is the next step!
 TODO THis is the next step! TODO THis is the next step! TODO THis is the next step!
@@ -1449,9 +1450,10 @@ TODO THis is the next step! TODO THis is the next step! TODO THis is the next st
 TODO THis is the next step! TODO THis is the next step! TODO THis is the next step!
 
 2. write the abstract command into the dm.command (0x17) register
-	In order to achieve this, perform a JTAG-write to the DTM's dtm.dmi register (0x11).
-	The 10-bit address will be the address of the dm.command register which is 0x17 according to page 20.
-	The 32-bit data will be the command that is assembled as explained below:
+In order to achieve this, perform a JTAG-write to the DTM's dtm.dmi register (0x11).
+The 10-bit address will be the address of the dm.command register which is 0x17 according to page 20.
+The 32-bit data will be the command that is assembled as explained below:
+The last two bits need to be 10 for a write.
 
 The abstract command looks like this:
 
@@ -1471,10 +1473,29 @@ in total
 00000010001000010000000000000000
 == 0x02210000
 
-3. retrieve the read value out of the 32 bit value "data" from arg0 (= dm.data0 register)
-	In order to achieve this, perform a JTAG-read from the DTM's DTM.dmi register (0x11).
-	The 10-bit address will be the address of arg0 == dm.data0 which is 0x04 according to page 20.
-	The 32-bit data will be the data "data" you have read from memory!
+
+3. Retrieve the read value out of the 32 bit value "data" from arg0 (= dm.data0 register)
+In order to achieve this, perform a JTAG-read from the DTM's DTM.dmi register (0x11).
+The 10-bit address will be the address of arg0 == dm.data0 which is 0x04 according to page 20.
+The 32-bit data will be the data "data" you have read from memory!
+The last two bits are 01 for a read operation
+
+4. Retrieve the Data out of the DTM.
+
+With step 3, the DTM will perform a wishbone read-cycle to read the data out of the DM. 
+Once it has received the data, the master places the read 32-bit value int the DTM.
+The DTM places the data into it's DTM.dmi data register (0x11).
+The data is now in the DTM.dmi data register (0x11).
+
+Now the data is stored in the DTM.dmi register after a read. 
+How is that data transmitted back to the JTAG debugger over JTAG?
+The answer is that the JTAG debugger has to loop back the state machine back to CAPTURE_DR which places the data into 
+the data dtm.dmi-shift register for the JTAG TAP / DTM to shift out this data to the JTAG debugger. 
+This time around, the data is actually valid and should be processed by the JTAG debugger!
+
+
+	
+
 
 Implementation:
 1. Implement writing to dm.data0 register. The command for the DTM.dmi register (DTM,dmi, at 0x11) write is [addr][data][op] = [0x04][data][10]

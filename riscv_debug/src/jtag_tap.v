@@ -9,14 +9,18 @@ module jtag_tap
     //
 
     // input - tag
-    input wire clk,                // clock input
-	input wire rst_n,              // asynchronous reset input, low active
+    input wire clk,                 // clock input
+	input wire rst_n,               // asynchronous reset input, low active
     input wire jtag_clk,
     input wire jtag_tdi,
     input wire jtag_tms,
 
     // output - jtag
-    output wire jtag_tdo,
+    output wire jtag_tdo,           // individual bits are shifted out here
+
+    //
+    // DEBUG ports (LED and print)
+    // 
 
     // output - jtag - debug
     output wire [5:0] led_o, // Tang Nano has 6 LEDs
@@ -26,6 +30,9 @@ module jtag_tap
     //
     // Wishbone
     //
+
+    input wire [63:0] read_transaction_data_i, // data that the wishbone master has read out of the slave
+    input wire transaction_ack_i, // wishbone transaction is over
 
     output wire start_read_transaction_o,
     output wire start_write_transaction_o,
@@ -49,10 +56,10 @@ reg start_write_transaction_o_reg;
 assign start_write_transaction_o = start_write_transaction_o_reg;
 
 reg [31:0] write_transaction_data_o_reg; // byte of data that the master uses during write transactions
-//assign write_transaction_data_o = write_transaction_data_o_reg;
 
-// output wbi custom
-//wire [31:0] read_transaction_data_o;
+
+
+
 
 //
 // JTAG registers
@@ -224,14 +231,73 @@ begin
     
 end
 
+//TODO, first latch teh data into some storag registera
+//and set a flag so that with the next jtag clock, the state
+//is copied into the dmi_data_register!
+//The once the copy has been done, reset the flag
+
+reg [DMI_REGISTER_WIDTH-1:0] dmi_data_register_temp_storage_reg;
+reg toggle_reg = 1;
+reg toggle_reg_old = 1;
+
+reg transaction_ack_i_old = 0;
+
+// DEBUG
+always @(posedge clk)
+begin
+    // Problem: transaction_ack_i triggers twice!
+    if (transaction_ack_i_old != transaction_ack_i)
+    begin
+
+        transaction_ack_i_old = transaction_ack_i;
+
+        if (transaction_ack_i == 1)
+        begin
+            // DEBUG
+            send_data = { 8'h88 };
+            printf = ~printf;
+
+            // place the data into the current data register
+            //dmi_data_register = read_transaction_data_i;
+
+            dmi_data_register_temp_storage_reg = read_transaction_data_i;
+            toggle_reg = ~toggle_reg;
+        end
+        else if (transaction_ack_i == 0)
+        begin
+            //// DEBUG
+            //send_data = { 8'h87 };
+            //printf = ~printf;
+        end
+    end
+end
 
 // combinational always block for next state logic
 always @(posedge jtag_clk)
+//always @(posedge jtag_clk or posedge transaction_ack_i)
+//always @(posedge clk)
 begin
 
-    //send_data <= { "+             ", 16'h0d0a };
-    //send_data <= { "+" };
-    //printf <= ~printf;
+    
+
+    //TODO
+    // TODO if wishbone slave data has arrived, put it into the DTM.dmi data register (0x11).
+    // Put it into the dmi_data_register
+
+//    if (transaction_ack_i == 1)
+//    begin
+
+        // place the data into the current data register
+        //if (toggle_reg_old != toggle_reg)
+        //begin
+            //// DEBUG
+            //send_data = { 8'h99 };
+            //printf = ~printf;
+
+//            toggle_reg_old = toggle_reg;
+//            dmi_data_register = dmi_data_register_temp_storage_reg;
+        //end
+//    end
 
     if (rst_n == 0)
     begin
@@ -403,7 +469,7 @@ begin
                     DMI_INSTRUCTION:
                         begin
                             //send_data <= { "SHIFT_DR DMI       ", 16'h0d0a };
-                            send_data <= jtag_tdi;
+                            //send_data <= jtag_tdi;
 
                             dmi_save_register <= dmi_shift_register[0];
                             dmi_shift_register <= { jtag_tdi, dmi_shift_register[DMI_REGISTER_WIDTH-1:1] };
@@ -446,7 +512,7 @@ begin
                     DMI_INSTRUCTION:
                         begin
                             //send_data <= { "SHIFT_DR DMI       ", 16'h0d0a };
-                            send_data <= jtag_tdi;
+                            //send_data <= jtag_tdi;
 
                             dmi_save_register <= dmi_shift_register[0];
                             dmi_shift_register <= { jtag_tdi, dmi_shift_register[DMI_REGISTER_WIDTH-1:1] };
@@ -469,7 +535,7 @@ begin
                 //led <= ~EXIT1_DR;
             end
 
-            printf = ~printf;
+            //printf = ~printf;
         end
 
         // State Id: 5
@@ -515,16 +581,17 @@ begin
                             OP_OUTGOING_NOP: begin
                                 // printf
                                 //send_data <= { "OP_OUTGOING_NOP    ", 16'h0d0a };
-                                send_data <= { 8'hF0 };
+                                //send_data <= { 8'hF0 };
 
                                 start_read_transaction_o_reg <= 0;
                                 start_write_transaction_o_reg <= 0;
                             end
 
+                            // Tipp: The result of the read cycle is available in ????
                             OP_OUTGOING_READ: begin
                                 // printf
                                 //send_data <= { "OP_OUTGOING_READ   ", 16'h0d0a };
-                                send_data <= { 8'hF1 };
+                                //send_data <= { 8'hF1 };
 
                                 // perform a read
                                 start_read_transaction_o_reg <= 1; // perform read
@@ -536,7 +603,7 @@ begin
                             OP_OUTGOING_WRITE: begin
                                 // printf
                                 //send_data <= { "OP_OUTGOING_WRITE  ", 16'h0d0a };
-                                send_data <= { 8'hF2 };
+                                //send_data <= { 8'hF2 };
 
                                 // perform a write
                                 start_read_transaction_o_reg <= 0; // no read
@@ -548,7 +615,7 @@ begin
                             OP_OUTGOING_RESERVED: begin
                                 // printf
                                 //send_data <= { "OP_OUTGOING_RESERVE", 16'h0d0a };
-                                send_data <= { 8'hF3 };
+                                //send_data <= { 8'hF3 };
 
                                 start_read_transaction_o_reg <= 0;
                                 start_write_transaction_o_reg <= 0;
@@ -557,7 +624,7 @@ begin
                             default: begin
                                 // printf
                                 //send_data <= { "default            ", 16'h0d0a };
-                                send_data <= { 8'hF4 };
+                                //send_data <= { 8'hF4 };
 
                                 start_read_transaction_o_reg <= 0;
                                 start_write_transaction_o_reg <= 0;
@@ -580,7 +647,7 @@ begin
                 //led <= ~UPDATE_DR;
             end
 
-            printf = ~printf;
+            //printf = ~printf;
         end
 
         // State Id: 6
@@ -648,7 +715,7 @@ begin
                             OP_OUTGOING_NOP: begin
                                 // printf
                                 //send_data <= { "OP_OUTGOING_NOP    ", 16'h0d0a };
-                                send_data <= { 8'hF0 };
+                                //send_data <= { 8'hF0 };
 
                                 start_read_transaction_o_reg <= 0;
                                 start_write_transaction_o_reg <= 0;
@@ -657,7 +724,7 @@ begin
                             OP_OUTGOING_READ: begin
                                 // printf
                                 //send_data <= { "OP_OUTGOING_READ   ", 16'h0d0a };
-                                send_data <= { 8'hF1 };
+                                //send_data <= { 8'hF1 };
 
                                 // perform a read
                                 start_read_transaction_o_reg <= 1; // perform read
@@ -669,7 +736,7 @@ begin
                             OP_OUTGOING_WRITE: begin
                                 // printf
                                 //send_data <= { "OP_OUTGOING_WRITE  ", 16'h0d0a };
-                                send_data <= { 8'hF2 };
+                                //send_data <= { 8'hF2 };
 
                                 // perform a write
                                 start_read_transaction_o_reg <= 0; // no read
@@ -681,7 +748,7 @@ begin
                             OP_OUTGOING_RESERVED: begin
                                 // printf
                                 //send_data <= { "OP_OUTGOING_RESERVE", 16'h0d0a };
-                                send_data <= { 8'hF3 };
+                                //send_data <= { 8'hF3 };
 
                                 start_read_transaction_o_reg <= 0;
                                 start_write_transaction_o_reg <= 0;
@@ -690,7 +757,7 @@ begin
                             default: begin
                                 // printf
                                 //send_data <= { "default            ", 16'h0d0a };
-                                send_data <= { 8'hF4 };
+                                //send_data <= { 8'hF4 };
 
                                 start_read_transaction_o_reg <= 0;
                                 start_write_transaction_o_reg <= 0;
@@ -713,7 +780,7 @@ begin
                 //led <= ~UPDATE_DR;
             end
 
-            printf <= ~printf;
+            //printf <= ~printf;
         end
 
         // State Id: 8

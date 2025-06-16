@@ -83,8 +83,8 @@ imem imem(debounced_sys_rst_n_wire, PC, Instr);
 // wishbone master
 //
 
-wire [63:0] read_data;
-wire [63:0] write_data;
+wire [63:0] read_data; // the wishbone slave places read data here
+wire [63:0] write_data; // master places write data for the slave to consume on a write cycle here
 wire ack;
 wire cyc;
 wire stb;
@@ -96,21 +96,28 @@ wire start_write_transaction; // output by the JTAG tap to cause the withbone ma
 wire[63:0] wishbone_tx_data;
 wire[31:0] wishbone_addr;
 
-wishbone_master wb_master (
+//reg [63:0] slave_read_result_reg;
+wire [63:0] slave_read_result;
+
+// This wishbone master is connected to the JTAG-TAP which uses it to
+// execute read and write wishbone cycles. The slave to this master is the DM.
+wishbone_master #(
+    .DATA_NUM(DATA_NUM)
+) wb_master (
 
     // input
     .clk_i(sys_clk),
     .rst_i(~sys_rst_n),
 
     // input master
-    .data_i(read_data),
-    .ack_i(ack),
+    .data_i(read_data), // the wishbone slave places read data here
+    .ack_i(ack), // the wishbone slave performs an ack here
 
     // input wbi custom 
-    .start_read_transaction_i(start_read_transaction),
-    .start_write_transaction_i(start_write_transaction),
-    .transaction_addr(wishbone_addr),
-    .write_transaction_data_i(wishbone_tx_data),
+    .start_read_transaction_i(start_read_transaction), // start a read cycle when 1
+    .start_write_transaction_i(start_write_transaction), // start a write cycle when 1
+    .transaction_addr(wishbone_addr), // wishbone addr in the slave
+    .write_transaction_data_i(wishbone_tx_data), // data to write into the slave
     
     // output master
     .addr_o(addr),
@@ -120,8 +127,18 @@ wishbone_master wb_master (
     .stb_o(stb),
 
     // output wbi custom
-    .read_transaction_data_o()
+    .read_transaction_data_o(slave_read_result), // data read from the slave during read cycles is returned here
 
+    /*
+    // printf - enabled
+    .send_data(send_data),
+    .printf(printf)    
+    */
+    /**/
+    // printf - disabled
+    .send_data(),
+    .printf()
+    
 );
 
 //
@@ -147,24 +164,24 @@ wishbone_dm_slave #(
     // input custom
 
     // output slave
-    .data_o(read_data), // the TX slave does not use data_o. It does not return any usefull data.
+    .data_o(read_data), // the slave returns the read data to the master from .data_o
     .ack_o(ack),
 
     // output wbi
     //.led_port_o(led), // output to the LEDs port
     .led_port_o(),
 
-    /**/
+    /*
     // printf - enabled
     .send_data(send_data),
     .printf(printf)
-    
+    */
 
-    /*
+    /**/
     // printf - disabled
     .send_data(),
     .printf()
-    */
+    
 
 );
 
@@ -393,25 +410,33 @@ jtag_tap #(
     //.r_led_reg(leds),
     .led_o(led),
 
-    /*
+    /**/
     // printf - enabled
     .send_data(send_data),
     .printf(printf),
-    */
+    
 
-    /**/
+    /*
     // printf - disabled
     .send_data(),
     .printf(),
+*/
 
+    //
+    // Wishbone
+    //
+
+    .read_transaction_data_i(slave_read_result), // the whishbone master places data read from the wishone slave here
+    .transaction_ack_i(ack), // wishbone transaction is over
 
     // when a JTAG command for dmi (0x11) arrives, the JTAG_TAP will
     // output commands to the wishbone master here. The wishbone master
     // talks to the RISCV DM which is a wishbone slave.
     .start_read_transaction_o(start_read_transaction),
     .start_write_transaction_o(start_write_transaction),
-    .addr_o(wishbone_addr),
-    .write_transaction_data_o(wishbone_tx_data)
+
+    .addr_o(wishbone_addr), // address within the slave to write to/read from
+    .write_transaction_data_o(wishbone_tx_data) // data to write into the wishbone slave through the master
 
 );
 
