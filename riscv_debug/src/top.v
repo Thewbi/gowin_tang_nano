@@ -83,9 +83,12 @@ imem imem(debounced_sys_rst_n_wire, PC, Instr);
 // wishbone master
 //
 
+wire wishbone_master_ack; // the wishbone master tells the JTAG TAP that the transaction is over
+wire [63:0] last_read_value;
+
 wire [63:0] read_data; // the wishbone slave places read data here
 wire [63:0] write_data; // master places write data for the slave to consume on a write cycle here
-wire ack;
+wire dm_slave_ack; // wishbone slave ack output
 wire cyc;
 wire stb;
 wire [31:0] addr; // addr for the master to write to / read from. Retrieved from the JTAG TAP.
@@ -111,7 +114,7 @@ wishbone_master #(
 
     // input master
     .data_i(read_data), // the wishbone slave places read data here
-    .ack_i(ack), // the wishbone slave performs an ack here
+    .ack_i(dm_slave_ack), // the wishbone slave performs an ack here
 
     // input wbi custom 
     .start_read_transaction_i(start_read_transaction), // start a read cycle when 1
@@ -128,6 +131,11 @@ wishbone_master #(
 
     // output wbi custom
     .read_transaction_data_o(slave_read_result), // data read from the slave during read cycles is returned here
+    
+//PROBLEM: Putting the ack from the wishbone slave directly into the JTAG TAP seems to not capture the read value!
+//We need to get the output value from the slave into the master and from the master into the JTAG_TAP
+    .wishbone_master_ack_o(wishbone_master_ack), // the wishbone master communicates to the JTAG_TAP that the transaction is over
+    .last_read_value_o(last_read_value),
 
     /*
     // printf - enabled
@@ -165,7 +173,7 @@ wishbone_dm_slave #(
 
     // output slave
     .data_o(read_data), // the slave returns the read data to the master from .data_o
-    .ack_o(ack),
+    .ack_o(dm_slave_ack),
 
     // output wbi
     //.led_port_o(led), // output to the LEDs port
@@ -206,7 +214,7 @@ wishbone_led_slave #(
 
     // output slave
     .data_o(read_data), // the TX slave does not use data_o. It does not return any usefull data.
-    .ack_o(ack),
+    .ack_o(dm_slave_ack),
 
     // output wbi
     .led_port_o(led) // output to the LEDs port
@@ -399,7 +407,6 @@ jtag_tap #(
     .clk(sys_clk),
     .rst_n(sys_rst_n),
     .jtag_clk(jtag_clk),
-    //.jtag_clk(w_Switch_1),
     .jtag_tdi(jtag_tdi),
     .jtag_tms(jtag_tms),
     
@@ -407,7 +414,6 @@ jtag_tap #(
     .jtag_tdo(jtag_tdo),
 
     // debug output
-    //.r_led_reg(leds),
     .led_o(led),
 
     /**/
@@ -427,7 +433,8 @@ jtag_tap #(
     //
 
     .read_transaction_data_i(slave_read_result), // the whishbone master places data read from the wishone slave here
-    .transaction_ack_i(ack), // wishbone transaction is over
+    .transaction_ack_i(wishbone_master_ack), // wishbone transaction is over
+    .last_read_value_i(last_read_value),
 
     // when a JTAG command for dmi (0x11) arrives, the JTAG_TAP will
     // output commands to the wishbone master here. The wishbone master

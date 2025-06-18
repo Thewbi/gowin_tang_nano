@@ -33,6 +33,7 @@ module jtag_tap
 
     input wire [63:0] read_transaction_data_i, // data that the wishbone master has read out of the slave
     input wire transaction_ack_i, // wishbone transaction is over
+    input wire [63:0] last_read_value_i,
 
     output wire start_read_transaction_o,
     output wire start_write_transaction_o,
@@ -81,7 +82,10 @@ reg [31:0] dr_shift_register;
 // stores dr_shift_register[0] bit before the shift is executed
 reg dr_save_register;
 
-// dmi (0x11)
+// dmi (0x11) - 44 bit register used to execute abstract commands (= address = 0x17)
+// in the DM or write arg registers in the DM (= address 0x04, 0x05)
+// These abstract commands take args (arg0, arg1)
+// The args are set by using the dmi in order
 localparam DMI_REGISTER_WIDTH = 10 + 32 + 2; // 10 address bits, 32 data bits, 2 op bits
 reg [DMI_REGISTER_WIDTH-1:0] dmi_data_register;
 reg [DMI_REGISTER_WIDTH-1:0] dmi_shift_register;
@@ -231,10 +235,10 @@ begin
     
 end
 
-//TODO, first latch teh data into some storag registera
-//and set a flag so that with the next jtag clock, the state
-//is copied into the dmi_data_register!
-//The once the copy has been done, reset the flag
+// TODO, first latch teh data into some storag registera
+// and set a flag so that with the next jtag clock, the state
+// is copied into the dmi_data_register!
+// The once the copy has been done, reset the flag
 
 reg [DMI_REGISTER_WIDTH-1:0] dmi_data_register_temp_storage_reg;
 reg toggle_reg = 1;
@@ -242,7 +246,13 @@ reg toggle_reg_old = 1;
 
 reg transaction_ack_i_old = 0;
 
-// DEBUG
+reg dmi_data_source_shift_old = 0;
+reg dmi_data_source_shift = 0;
+
+reg dmi_data_source_read_transaction_data_old = 0;
+reg dmi_data_source_read_transaction_data = 0;
+
+// react to ack_i from the wishbone master
 always @(posedge clk)
 begin
     // Problem: transaction_ack_i triggers twice!
@@ -254,21 +264,61 @@ begin
         if (transaction_ack_i == 1)
         begin
             // DEBUG
-            send_data = { 8'h88 };
+            //send_data = { 8'h88 };
+            send_data = last_read_value_i[31:24];
             printf = ~printf;
 
             // place the data into the current data register
             //dmi_data_register = read_transaction_data_i;
 
-            dmi_data_register_temp_storage_reg = read_transaction_data_i;
-            toggle_reg = ~toggle_reg;
+            //dmi_data_register_temp_storage_reg = read_transaction_data_i;
+            //toggle_reg = ~toggle_reg;
+
+            // trigger update of the dmi_data_source register from the wishbone read transaction
+            dmi_data_source_read_transaction_data = ~dmi_data_source_read_transaction_data;
         end
         else if (transaction_ack_i == 0)
         begin
-            //// DEBUG
+            // DEBUG
             //send_data = { 8'h87 };
+            //send_data = read_transaction_data_i[31:24];
             //printf = ~printf;
         end
+    end
+end
+
+
+// ako
+//
+// this block is here because the register 'dmi_data_register' has to 
+// be updated by the UPDATE machine state and also from a wishbone transaction
+always @(posedge clk)
+begin
+
+    // dmi_data_register is assigned the dmi_shift_register
+    if (dmi_data_source_shift_old != dmi_data_source_shift)
+    begin
+        dmi_data_source_shift_old = dmi_data_source_shift;
+
+        //// DEBUG
+        //send_data = { 8'h91 };
+        //printf = ~printf;
+
+        // update dmi_data_register
+        dmi_data_register = dmi_shift_register;
+    end
+
+    // dmi_data_register is assigned the wishbone transaction result
+    if (dmi_data_source_read_transaction_data_old != dmi_data_source_read_transaction_data)
+    begin
+        dmi_data_source_read_transaction_data_old = dmi_data_source_read_transaction_data;
+
+        //// DEBUG
+        //send_data = read_transaction_data_i[31:24];
+        //printf = ~printf;
+
+        // update dmi_data_register
+        dmi_data_register = read_transaction_data_i[31:0];
     end
 end
 
@@ -276,9 +326,7 @@ end
 always @(posedge jtag_clk)
 //always @(posedge jtag_clk or posedge transaction_ack_i)
 //always @(posedge clk)
-begin
-
-    
+begin    
 
     //TODO
     // TODO if wishbone slave data has arrived, put it into the DTM.dmi data register (0x11).
@@ -302,12 +350,12 @@ begin
     if (rst_n == 0)
     begin
         jtag_clk_counter = 32'h00;
-        led = ~jtag_clk_counter;
+        led = ~jtag_clk_counter[5:0];
     end
     else
     begin
         jtag_clk_counter = jtag_clk_counter + 32'h01;
-        led = ~jtag_clk_counter;
+        led = ~jtag_clk_counter[5:0];
     end
 
     case (cur_state)
@@ -568,7 +616,12 @@ begin
                         // printf
                         ////send_data <= { "DMI_INSTRUCTION    ", 16'h0d0a };
 
-                        dmi_data_register = dmi_shift_register;
+                        //dmi_data_register = dmi_shift_register;
+
+                        // ako
+                        //
+                        // trigger that dmi_data_source from the dmi_shift_register
+                        dmi_data_source_shift = ~dmi_data_source_shift;
 
                         // start a wishbone write or read, depending on the op bits
 
@@ -583,6 +636,7 @@ begin
                                 //send_data <= { "OP_OUTGOING_NOP    ", 16'h0d0a };
                                 //send_data <= { 8'hF0 };
 
+                                // do not read or write
                                 start_read_transaction_o_reg <= 0;
                                 start_write_transaction_o_reg <= 0;
                             end
@@ -621,7 +675,8 @@ begin
                                 start_write_transaction_o_reg <= 0;
                             end
                             
-                            default: begin
+                            default: 
+                            begin
                                 // printf
                                 //send_data <= { "default            ", 16'h0d0a };
                                 //send_data <= { 8'hF4 };
@@ -702,7 +757,12 @@ begin
                         // printf
                         ////send_data <= { "DMI_INSTRUCTION    ", 16'h0d0a };
 
-                        dmi_data_register = dmi_shift_register;
+                        //dmi_data_register = dmi_shift_register;
+
+                        // ako
+                        //
+                        // trigger that dmi_data_source from the dmi_shift_register
+                        dmi_data_source_shift = ~dmi_data_source_shift;
 
                         // start a wishbone write or read, depending on the op bits
 
@@ -712,19 +772,22 @@ begin
 
                         case (dmi_data_register_op_reg)
 
-                            OP_OUTGOING_NOP: begin
+                            OP_OUTGOING_NOP: 
+                            begin
                                 // printf
                                 //send_data <= { "OP_OUTGOING_NOP    ", 16'h0d0a };
-                                //send_data <= { 8'hF0 };
+                                //send_data <= { 8'hE0 };
 
+                                // do not read nor write
                                 start_read_transaction_o_reg <= 0;
                                 start_write_transaction_o_reg <= 0;
                             end
 
-                            OP_OUTGOING_READ: begin
+                            OP_OUTGOING_READ: 
+                            begin
                                 // printf
                                 //send_data <= { "OP_OUTGOING_READ   ", 16'h0d0a };
-                                //send_data <= { 8'hF1 };
+                                //send_data <= { 8'hE1 };
 
                                 // perform a read
                                 start_read_transaction_o_reg <= 1; // perform read
@@ -733,10 +796,11 @@ begin
                                 //write_transaction_data_o_reg <= 8'b01010101;
                             end
 
-                            OP_OUTGOING_WRITE: begin
+                            OP_OUTGOING_WRITE: 
+                            begin
                                 // printf
                                 //send_data <= { "OP_OUTGOING_WRITE  ", 16'h0d0a };
-                                //send_data <= { 8'hF2 };
+                                //send_data <= { 8'hE2 };
 
                                 // perform a write
                                 start_read_transaction_o_reg <= 0; // no read
@@ -745,19 +809,21 @@ begin
                                 //write_transaction_data_o_reg <= 8'b10101010;
                             end
 
-                            OP_OUTGOING_RESERVED: begin
+                            OP_OUTGOING_RESERVED: 
+                            begin
                                 // printf
                                 //send_data <= { "OP_OUTGOING_RESERVE", 16'h0d0a };
-                                //send_data <= { 8'hF3 };
+                                //send_data <= { 8'hE3 };
 
                                 start_read_transaction_o_reg <= 0;
                                 start_write_transaction_o_reg <= 0;
                             end
                             
-                            default: begin
+                            default: 
+                            begin
                                 // printf
                                 //send_data <= { "default            ", 16'h0d0a };
-                                //send_data <= { 8'hF4 };
+                                //send_data <= { 8'hE4 };
 
                                 start_read_transaction_o_reg <= 0;
                                 start_write_transaction_o_reg <= 0;

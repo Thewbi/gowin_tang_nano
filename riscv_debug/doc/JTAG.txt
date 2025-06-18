@@ -1320,11 +1320,11 @@ Table 3.2 lists all commands.
 
 Table 3.2: Meaning of cmdtype
 
-| cmdtype | Command | Page in Spec Document |
-| ------- | ------- | --------------------- |
-| 0 | Access Register Command | 12 |
-| 1 | Quick Access | 14 |
-| 2 | Access Memory Command | 14 |
+| cmdtype | Command                 | Page in Spec Document |
+| ------- | ----------------------- | --------------------- |
+| 0       | Access Register Command | 12                    |
+| 1       | Quick Access            | 14                    |
+| 2       | Access Memory Command   | 14                    |
 
 
 ## Writing Memory through an abstract command
@@ -1409,7 +1409,7 @@ in total
 
 
 
-## Reading Memory through an abstract command
+## Reading Memory through an abstract command (command is 0x02, Access Memory)
 
 3.6.1.3 Access Memory, Page 14
 
@@ -1455,20 +1455,20 @@ The 10-bit address will be the address of the dm.command register which is 0x17 
 The 32-bit data will be the command that is assembled as explained below:
 The last two bits need to be 10 for a write.
 
-The abstract command looks like this:
+The abstract command looks like this: (the address to actually read from is implicitly expected in dm.data1 register (0x05) write it first!)
 
-00000010bin				- 0x02 = cmdtype for "access memory"
-0bin 					- no virtual memory translation
-010bin 					- (aamsize) 2dec means 32 bit data transfer
-0bin 					- no postincrement
-00bin 					- not used
-1bin 					- read (0 would be write)
-00bin 					- target specific (not used)
-0000 0000 0000 00bin 	- not used
+00000010 bin			- 0x02 = cmdtype for "access memory"
+0 bin 					- no virtual memory translation
+010 bin 				- (aamsize) 2dec means 32 bit data transfer
+0 bin 					- no postincrement
+00 bin 					- not used
+1 bin 					- read (0 would be write)
+00 bin 					- target specific (not used)
+0000 0000 0000 00 bin 	- not used
 
 in total 
-[00000010] [0] [010] [0] [00] [1] [00] [00000000000000]
-00000010 0 010 0 00 1 00 00000000000000
+[00000010] [0] [010] [0] [00] [1] [00] [0000 0000 0000 00]
+ 00000010   0   010   0   00   1   00   0000 0000 0000 00
 0000 0010 0010 0001 0000 0000 0000 0000
 00000010001000010000000000000000
 == 0x02210000

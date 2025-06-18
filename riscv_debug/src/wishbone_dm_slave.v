@@ -13,7 +13,7 @@ module wishbone_dm_slave
     // input (slaves)
     input wire [31:0] addr_i, // address within a wishbone slave
     input wire we_i, // write enable, 1 = write, 0 = read
-    input wire [63:0] data_i, // data for the slave consumes
+    input wire [63:0] data_i, // data for the slave to consume
     input wire cyc_i, // master starts and terminates cycle
     input wire stb_i, // master starts and terminates strobes
 
@@ -72,6 +72,59 @@ localparam RESUMEREQ = 30;
 localparam HARTRESET = 29;
 
 //
+// DualSource Registers
+//
+
+// hog
+reg data0_source_write_reg_old = 0;
+reg data0_source_write_reg = 0;
+
+reg data0_source_mem_access_data_old = 0;
+reg data0_source_mem_access_data = 0;
+
+// hog
+//
+// this block is here because the register 'data0_reg' has to 
+// be updated by the write register command and also from read memory command
+always @(posedge clk_i)
+begin
+
+    // if reset is asserted, 
+    if (rst_i) 
+    begin
+        // add line for new register here
+        data0_reg = ZERO_VALUE;
+    end    
+    else 
+    begin
+
+        // data0_reg is assigned the ... register
+        if (data0_source_write_reg_old != data0_source_write_reg)
+        begin
+            data0_source_write_reg_old = data0_source_write_reg;
+
+            // update data0_reg
+            data0_reg = data_i[31:0];
+        end
+
+        // data0_reg is assigned the wishbone transaction result
+        if (data0_source_mem_access_data_old != data0_source_mem_access_data)
+        begin
+            data0_source_mem_access_data_old = data0_source_mem_access_data;
+
+            // update data0_reg
+            //data0_reg = 32'h12345678;
+            data0_reg = 32'h87654321;
+
+            // DEBUG - data0 update from mem_access triggered
+            //send_data = { 8'h4A };
+            //printf = ~printf;
+        end
+
+    end
+end
+
+//
 // WISHBONE
 // 
 
@@ -95,7 +148,7 @@ localparam WRITE = 2;
 reg [1:0] cur_state = IDLE;
 reg [1:0] next_state;
 
-// print feedback and execute command (0x17)
+// print feedback and execute commands
 //
 // this block prints feedback only when the register gets a new value
 // Although the register value is update on each write!
@@ -105,7 +158,7 @@ begin
     if (rst_i) 
     begin
         // STEP 1 - add line for new register here        
-        data0_reg_updated_old = ZERO_VALUE;
+        //data0_reg_updated_old = ZERO_VALUE;
         data1_reg_updated_old = ZERO_VALUE;
         control_reg_updated_old = ZERO_VALUE;
         command_reg_updated_old = ZERO_VALUE;
@@ -132,6 +185,8 @@ begin
             //// DEBUG
             //send_data = { 8'h05 };
             //printf = ~printf;
+
+            //data1_reg = data_i[31:0];
         end
         // dm.control (0x10)
         else if (control_reg_updated_old != control_reg_updated)
@@ -158,15 +213,20 @@ begin
             //printf = ~printf;
             
         end
-        // dm.command (0x17)
+        // dm.command (0x17) - writing (0x17, the command register) allows the DTM to execute abstract commands in the DM.
         else if (command_reg_updated_old != command_reg_updated)
         begin
             command_reg_updated_old = command_reg_updated;
 
-            //// DEBUG
-            //send_data = { 8'h17 };
+            // TODO: execute the abstract command! (e.g. access memory)
+            // FOR NOW; return value 0x12345678 into arg0 (which is data0, in XLEN=32 bit)
+            data0_source_mem_access_data = ~data0_source_mem_access_data;
+
+            //// DEBUG - data0 update from mem_access triggered
+            //send_data = { 8'h49 };
             //printf = ~printf;
         end
+
     end
 end
 
@@ -181,7 +241,7 @@ begin
         cur_state = IDLE;
 
         // STEP 3 - add line for new register here
-        data0_reg = ZERO_VALUE;
+        //data0_reg = ZERO_VALUE;
         data1_reg = ZERO_VALUE;
         control_reg = ZERO_VALUE;
         command_reg = ZERO_VALUE; 
@@ -202,8 +262,11 @@ begin
 
                 // write dm.data0 (0x04)
                 ADDRESS_DM_DATA0_REGISTER:
-                begin                    
-                    data0_reg = data_i; // store the written value into the data0 register of this DM
+                begin 
+                    // hog
+                    //data0_reg = data_i; // store the written value into the data0 register of this DM
+
+                    data0_source_write_reg = ~data0_source_write_reg;
                 end
 
                 // write dm.data1 (0x05)
@@ -292,9 +355,9 @@ begin
                     begin
                         data_o_reg = data1_reg; // present the read data
 
-                        // DEBUG
-                        send_data = { 8'h31 };
-                        printf = ~printf;
+                        //// DEBUG
+                        //send_data = { 8'h31 };
+                        //printf = ~printf;
                     end
 
                     // dm.control (0x10)
@@ -302,9 +365,9 @@ begin
                     begin
                         data_o_reg = control_reg; // present the read data
 
-                        // DEBUG
-                        send_data = { 8'h32 };
-                        printf = ~printf;
+                        //// DEBUG
+                        //send_data = { 8'h32 };
+                        //printf = ~printf;
                     end
 
                     // dm.command (0x17)
@@ -312,9 +375,9 @@ begin
                     begin
                         data_o_reg = command_reg; // present the read data
 
-                        // DEBUG
-                        send_data = { 8'h33 };
-                        printf = ~printf;
+                        //// DEBUG
+                        //send_data = { 8'h33 };
+                        //printf = ~printf;
                     end
 
                     default:
@@ -340,6 +403,11 @@ begin
 
         WRITE:
         begin
+
+            //// DEBUG
+            //send_data = { 8'h45 };
+            //printf = ~printf;
+
             // The slave will keep ACK_I asserted until the master negates 
             // [STB_O] and [CYC_O] to indicate the end of the cycle.
             //
@@ -376,10 +444,18 @@ begin
                     begin
                         // data is stored inside the next state logic
                         data_o_reg = command_reg; // present the read data (this is basically a read operation!)
+    
+                        //// DEBUG - data0 update from mem_access triggered
+                        //send_data = { 8'h46 };
+                        //printf = ~printf;
                     end
 
                     default:
                     begin
+                        //// DEBUG - data0 update from mem_access triggered
+                        //send_data = { 8'h47 };
+                        //printf = ~printf;
+
                         data_o_reg = ZERO_VALUE;
                     end
 
@@ -388,7 +464,8 @@ begin
                 // acknowledge write
                 ack_o_reg = 1;
 
-                // only if there has not been a reaction to the latest finished write transaction, perform a reaction
+                // only if there has not been a reaction to the latest finished write transaction, 
+                // perform a reaction
                 if (transaction_done == 0)
                 begin
                     transaction_done = 1; // buffer the reaction in order to not repeat it again
@@ -418,6 +495,10 @@ begin
                         ADDRESS_DM_COMMAND_REGISTER:
                         begin
                             command_reg_updated = ~command_reg_updated;
+
+                            //// DEBUG - data0 update from mem_access triggered
+                            //send_data = { 8'h48 };
+                            //printf = ~printf;
                         end
 
                         default:
