@@ -1,3 +1,7 @@
+//`define DEBUG_OUTPUT_STATE_TRANSITIONS 1
+`define DEBUG_OUTPUT_DMI_OPERATION 1
+`define DEBUG_OUTPUT_ENTER_UPDATE_DR_INFO 1
+
 module jtag_tap
 #(
     parameter DATA_NUM = 16 // for printf
@@ -178,12 +182,15 @@ begin
     end    
     else 
     begin
+
+`ifdef DEBUG_OUTPUT_STATE_TRANSITIONS
         if (cur_state !== next_state)
         begin
             // DEBUG
             send_data = next_state;
             printf = ~printf;
         end
+`endif
 
         // else transition to the next state
         cur_state = next_state;
@@ -534,16 +541,27 @@ begin
             end
             else
             begin
+
                 // on enter: UPDATE_DR from EXIT1_DR (also update UPDATE_DR from EXIT2_DR, l. 746)
                 case (ir_data_register)
                 
                     IDCODE_INSTRUCTION:
                     begin
+`ifdef DEBUG_OUTPUT_ENTER_UPDATE_DR_INFO
+                        // DEBUG
+                        send_data = { 8'h00 };
+                        printf = ~printf;
+`endif
                         id_code_register <= dr_shift_register;
                     end
 
                     BYPASS_INSTRUCTION:
                     begin
+`ifdef DEBUG_OUTPUT_ENTER_UPDATE_DR_INFO
+                        // DEBUG
+                        send_data = { 8'h01 };
+                        printf = ~printf;
+`endif
                         bypass_register <= bypass_shift_register;
                     end
 
@@ -561,10 +579,11 @@ begin
                         case (dmi_data_register_op_reg)
 
                             OP_OUTGOING_NOP: begin
-                                //// DEBUG
-                                //send_data = { 8'hF0 };
-                                //printf = ~printf;
-
+`ifdef DEBUG_OUTPUT_DMI_OPERATION
+                                // DEBUG
+                                send_data = { 8'hF0 };
+                                printf = ~printf;
+`endif
                                 // do not read or write
                                 start_read_transaction_o_reg = 0;
                                 start_write_transaction_o_reg = 0;
@@ -572,40 +591,44 @@ begin
 
                             // Tipp: The result of the read cycle is available in ????
                             OP_OUTGOING_READ: begin
-                                //// DEBUG
-                                //send_data = { 8'hF1 };
-                                //printf = ~printf;
-
+`ifdef DEBUG_OUTPUT_DMI_OPERATION
+                                // DEBUG
+                                send_data = { 8'hF1 };
+                                printf = ~printf;
+`endif
                                 // perform a read
                                 start_read_transaction_o_reg = 1; // perform read
                                 start_write_transaction_o_reg = 0; // no write
                             end
 
                             OP_OUTGOING_WRITE: begin
-                                //// DEBUG
-                                //send_data = { 8'hF2 };
-                                //printf = ~printf;
-
+`ifdef DEBUG_OUTPUT_DMI_OPERATION
+                                // DEBUG
+                                send_data = { 8'hF2 };
+                                printf = ~printf;
+`endif
                                 // perform a write
                                 start_read_transaction_o_reg = 0; // no read
                                 start_write_transaction_o_reg = 1; // perform write
                             end
 
                             OP_OUTGOING_RESERVED: begin
-                                //// DEBUG
-                                //send_data = { 8'hF3 };
-                                //printf = ~printf;
-
+`ifdef DEBUG_OUTPUT_DMI_OPERATION
+                                // DEBUG
+                                send_data = { 8'hF3 };
+                                printf = ~printf;
+`endif
                                 start_read_transaction_o_reg = 0;
                                 start_write_transaction_o_reg = 0;
                             end
                             
                             default: 
                             begin
-                                //// printf
-                                //send_data = { 8'hF4 };
-                                //printf = ~printf;
-
+`ifdef DEBUG_OUTPUT_DMI_OPERATION
+                                // DEBUG
+                                send_data = { 8'hF4 };
+                                printf = ~printf;
+`endif
                                 start_read_transaction_o_reg = 0;
                                 start_write_transaction_o_reg = 0;
                             end
@@ -616,6 +639,11 @@ begin
 
                     CUSTOM_REGISTER_1_INSTRUCTION:
                     begin
+`ifdef DEBUG_OUTPUT_ENTER_UPDATE_DR_INFO
+                        // DEBUG
+                        send_data = { 8'h03 };
+                        printf = ~printf;
+`endif
                         dr_custom_register_1 = dr_shift_register;
                     end
 
@@ -653,11 +681,21 @@ begin
                 
                     IDCODE_INSTRUCTION:
                     begin
+`ifdef DEBUG_OUTPUT_ENTER_UPDATE_DR_INFO
+                        // DEBUG
+                        send_data = { 8'h04 };
+                        printf = ~printf;
+`endif
                         id_code_register <= dr_shift_register;                        
                     end
 
                     BYPASS_INSTRUCTION:
                     begin
+`ifdef DEBUG_OUTPUT_ENTER_UPDATE_DR_INFO
+                        // DEBUG
+                        send_data = { 8'h05 };
+                        printf = ~printf;
+`endif
                         bypass_register <= bypass_shift_register;
                     end
 
@@ -679,9 +717,11 @@ begin
 
                             OP_OUTGOING_NOP: 
                             begin
-                                //// DEBUG
-                                //send_data = { 8'hE0 };
-                                //printf = ~printf;
+`ifdef DEBUG_OUTPUT_DMI_OPERATION
+                                // DEBUG
+                                send_data = { 8'hE0 };
+                                printf = ~printf;
+`endif
 
                                 // do not read nor write
                                 start_read_transaction_o_reg <= 0;
@@ -690,9 +730,11 @@ begin
 
                             OP_OUTGOING_READ: 
                             begin
-                                //// DEBUG
-                                //send_data = { 8'hE1 };
-                                //printf = ~printf;
+`ifdef DEBUG_OUTPUT_DMI_OPERATION
+                                // DEBUG
+                                send_data = { 8'hE1 };
+                                printf = ~printf;
+`endif
 
                                 // perform a read
                                 start_read_transaction_o_reg <= 1; // perform read
@@ -701,9 +743,11 @@ begin
 
                             OP_OUTGOING_WRITE: 
                             begin
-                                //// DEBUG
-                                //send_data = { 8'hE2 };
-                                //printf = ~printf;
+`ifdef DEBUG_OUTPUT_DMI_OPERATION
+                                // DEBUG
+                                send_data = { 8'hE2 };
+                                printf = ~printf;
+`endif
 
                                 // perform a write
                                 start_read_transaction_o_reg <= 0; // no read
@@ -712,9 +756,11 @@ begin
 
                             OP_OUTGOING_RESERVED: 
                             begin
-                                //// DEBUG
-                                //send_data = { 8'hE3 };
-                                //printf = ~printf;
+`ifdef DEBUG_OUTPUT_DMI_OPERATION
+                                // DEBUG
+                                send_data = { 8'hE3 };
+                                printf = ~printf;
+`endif
 
                                 start_read_transaction_o_reg <= 0;
                                 start_write_transaction_o_reg <= 0;
@@ -722,10 +768,11 @@ begin
                             
                             default: 
                             begin
-                                //// DEBUG
-                                //send_data = { 8'hE4 };
-                                //printf = ~printf;
-
+`ifdef DEBUG_OUTPUT_DMI_OPERATION
+                                // DEBUG
+                                send_data = { 8'hE4 };
+                                printf = ~printf;
+`endif
                                 start_read_transaction_o_reg <= 0;
                                 start_write_transaction_o_reg <= 0;
                             end
@@ -736,6 +783,11 @@ begin
 
                     CUSTOM_REGISTER_1_INSTRUCTION:
                     begin
+`ifdef DEBUG_OUTPUT_ENTER_UPDATE_DR_INFO
+                        // DEBUG
+                        send_data = { 8'h07 };
+                        printf = ~printf;
+`endif
                         dr_custom_register_1 <= dr_shift_register;
                     end
 
@@ -832,9 +884,9 @@ begin
             end
             else
             begin
-                // on enter: UPDATE_IR from EXIT1_IR
+                // on enter: UPDATE_IR from EXIT1_IR (also check EXIT2_IR)
 
-                ir_data_register <= ir_shift_register;
+                ir_data_register = ir_shift_register;
 
                 next_state <= UPDATE_IR;
 
@@ -871,7 +923,8 @@ begin
             else
             begin
                 // on enter: UPDATE_IR from EXIT2_IR
-                ir_data_register <= ir_shift_register;
+
+                ir_data_register = ir_shift_register;
 
                 next_state <= UPDATE_IR;
 
