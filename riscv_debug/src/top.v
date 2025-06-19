@@ -32,9 +32,6 @@ module top(
 
 );
 
-
-
-//reg  r_Switch_1 = 1'b0;
 wire debounced_sys_rst_n_wire;
 
 // Instantiate Debounce Module
@@ -45,6 +42,36 @@ Debounce_Switch debounce_sys_rst_n
     .o_Switch(debounced_sys_rst_n_wire)
 );
 
+/**/
+wire debounced_jtag_clk_wire;
+
+// Instantiate Debounce Module
+Debounce_Switch debounce_jtag_clk
+(
+    .i_Clk(sys_clk), 
+    .i_Switch(jtag_clk),
+    .o_Switch(debounced_jtag_clk_wire)
+);
+
+
+/*
+//
+// user button demo application
+//
+
+// http://nandland.com/project-4-debounce-a-switch/
+
+reg  r_Switch_1 = 1'b0;
+wire w_Switch_1;
+
+// Instantiate Debounce Module
+Debounce_Switch debounce_Inst
+(
+    .i_Clk(sys_clk), 
+    .i_Switch(btn1_n),
+    .o_Switch(w_Switch_1)
+);
+*/
 
 
 //
@@ -361,24 +388,7 @@ uart_tx
 	.tx_pin                     (uart_tx)
 );
 
-/*
-//
-// user button demo application
-//
 
-// http://nandland.com/project-4-debounce-a-switch/
-
-reg  r_Switch_1 = 1'b0;
-wire w_Switch_1;
-
-// Instantiate Debounce Module
-Debounce_Switch debounce_Inst
-(
-    .i_Clk(sys_clk), 
-    .i_Switch(btn1_n),
-    .o_Switch(w_Switch_1)
-);
-*/
 
 //
 // JTAG example
@@ -406,7 +416,8 @@ jtag_tap #(
     // input
     .clk(sys_clk),
     .rst_n(sys_rst_n),
-    .jtag_clk(jtag_clk),
+    //.jtag_clk(jtag_clk),
+    .jtag_clk(debounced_jtag_clk_wire),
     .jtag_tdi(jtag_tdi),
     .jtag_tms(jtag_tms),
     

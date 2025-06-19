@@ -178,6 +178,13 @@ begin
     end    
     else 
     begin
+        if (cur_state !== next_state)
+        begin
+            // DEBUG
+            send_data = next_state;
+            printf = ~printf;
+        end
+
         // else transition to the next state
         cur_state = next_state;
     end
@@ -323,8 +330,9 @@ end
 always @(posedge jtag_clk)
 begin
 
-    send_data = 8'h01;
-    printf = ~printf;
+    // DEBUG
+    //send_data = 8'h01;
+    //printf = ~printf;
 
 /*
     if (rst_n == 0)
@@ -347,6 +355,10 @@ begin
             if (jtag_tms == 1'b0) 
             begin
                 next_state <= RUN_TEST_IDLE;
+
+                //// DEBUG
+                //send_data = RUN_TEST_IDLE;
+                //printf = ~printf;
             end
             else
             begin
@@ -403,19 +415,12 @@ begin
                 endcase
     
                 next_state <= CAPTURE_DR;
-
-                //led <= ~CAPTURE_DR;
             end
             else
             begin
 
                 next_state <= SELECT_IR_SCAN;
-
-                //send_data <= { "SELECT_IR_SCAN     ", 16'h0d0a };                    
-                //led <= ~SELECT_IR_SCAN;
             end
-
-            //printf = ~printf;
         end
 
         // State Id: 3
@@ -556,7 +561,7 @@ begin
                         case (dmi_data_register_op_reg)
 
                             OP_OUTGOING_NOP: begin
-                                //// printf
+                                //// DEBUG
                                 //send_data = { 8'hF0 };
                                 //printf = ~printf;
 
@@ -567,9 +572,9 @@ begin
 
                             // Tipp: The result of the read cycle is available in ????
                             OP_OUTGOING_READ: begin
-                                //// printf
+                                //// DEBUG
                                 //send_data = { 8'hF1 };
-                                //printf = ~printf;;
+                                //printf = ~printf;
 
                                 // perform a read
                                 start_read_transaction_o_reg = 1; // perform read
@@ -577,7 +582,7 @@ begin
                             end
 
                             OP_OUTGOING_WRITE: begin
-                                // printf
+                                //// DEBUG
                                 //send_data = { 8'hF2 };
                                 //printf = ~printf;
 
@@ -587,7 +592,7 @@ begin
                             end
 
                             OP_OUTGOING_RESERVED: begin
-                                // printf
+                                //// DEBUG
                                 //send_data = { 8'hF3 };
                                 //printf = ~printf;
 
@@ -597,8 +602,9 @@ begin
                             
                             default: 
                             begin
-                                // printf
-                                //send_data <= { 8'hF4 };
+                                //// printf
+                                //send_data = { 8'hF4 };
+                                //printf = ~printf;
 
                                 start_read_transaction_o_reg = 0;
                                 start_write_transaction_o_reg = 0;
@@ -673,7 +679,7 @@ begin
 
                             OP_OUTGOING_NOP: 
                             begin
-                                // printf
+                                //// DEBUG
                                 //send_data = { 8'hE0 };
                                 //printf = ~printf;
 
@@ -684,7 +690,7 @@ begin
 
                             OP_OUTGOING_READ: 
                             begin
-                                // printf
+                                //// DEBUG
                                 //send_data = { 8'hE1 };
                                 //printf = ~printf;
 
@@ -695,7 +701,7 @@ begin
 
                             OP_OUTGOING_WRITE: 
                             begin
-                                // printf
+                                //// DEBUG
                                 //send_data = { 8'hE2 };
                                 //printf = ~printf;
 
@@ -706,7 +712,7 @@ begin
 
                             OP_OUTGOING_RESERVED: 
                             begin
-                                // printf
+                                //// DEBUG
                                 //send_data = { 8'hE3 };
                                 //printf = ~printf;
 
@@ -716,7 +722,7 @@ begin
                             
                             default: 
                             begin
-                                // printf
+                                //// DEBUG
                                 //send_data = { 8'hE4 };
                                 //printf = ~printf;
 
@@ -797,9 +803,6 @@ begin
                 ir_save_register <= ir_shift_register[0];
                 ir_shift_register <= { jtag_tdi, ir_shift_register[31:1] };
 
-                //send_data <= { "SHIFT_IR           ", 16'h0d0a };
-                //led <= ~SHIFT_IR;
-
                 next_state = cur_state;
             end
             else
@@ -813,11 +816,8 @@ begin
 
                 next_state = EXIT1_IR;
                 
-                //send_data <= { "EXIT1_IR           ", 16'h0d0a };
-                //led <= ~EXIT1_IR;                
             end
 
-            //printf = ~printf;
         end
 
         // State Id: 12
@@ -829,8 +829,6 @@ begin
 
                 next_state <= PAUSE_IR;
 
-                //send_data <= { "PAUSE_IR           ", 16'h0d0a };                
-                //led <= ~PAUSE_IR;
             end
             else
             begin
@@ -840,11 +838,8 @@ begin
 
                 next_state <= UPDATE_IR;
 
-                //send_data <= { "UPDATE_IR          ", 16'h0d0a };                
-                //led <= ~UPDATE_IR;
             end
 
-            //printf = ~printf;
         end
 
         // State Id: 13
@@ -852,19 +847,14 @@ begin
         begin
             if (jtag_tms == 1'b0) 
             begin
-                //send_data <= { "PAUSE_IR           ", 16'h0d0a };
-                //led <= ~PAUSE_IR;
 
                 next_state <= cur_state;
             end
             else
             begin
-                //send_data <= { "EXIT2_IR           ", 16'h0d0a };
                 next_state <= EXIT2_IR;
-                //led <= ~EXIT2_IR;
             end
 
-            //printf = ~printf;
         end
 
         // State Id: 14
@@ -877,8 +867,6 @@ begin
 
                 next_state <= SHIFT_IR;
 
-                //send_data <= { "SHIFT_IR           ", 16'h0d0a };                
-                //led <= ~SHIFT_IR;
             end
             else
             begin
@@ -887,11 +875,8 @@ begin
 
                 next_state <= UPDATE_IR;
 
-                //send_data <= { "UPDATE_IR          ", 16'h0d0a };                
-                //led <= ~UPDATE_IR;
             end
 
-            //printf = ~printf;
         end
 
         // State Id: 15
@@ -899,33 +884,20 @@ begin
         begin
             if (jtag_tms == 1'b0) 
             begin
-                //send_data <= { "RUN_TEST_IDLE      ", 16'h0d0a };
                 next_state <= RUN_TEST_IDLE;
-                //led <= ~RUN_TEST_IDLE;
             end
             else
             begin
-                //send_data <= { "SELECT_DR_SCAN     ", 16'h0d0a };
                 next_state <= SELECT_DR_SCAN;
-                //led <= ~SELECT_DR_SCAN;
             end
-
-            //printf = ~printf;
         end
 
         // State Id: 16
         default:
         begin
-            // LED pattern
-            //r_led_reg <= 6'b101010;
-
-            // write ouptut over UART!
-            //send_data = { "TEST_LOGIC_RESET       ", 16'h0d0a };
-            //printf = 1'b1;
 
             // next state
             next_state <= TEST_LOGIC_RESET;
-            ////led <= ~TEST_LOGIC_RESET;
         end
         
     endcase
