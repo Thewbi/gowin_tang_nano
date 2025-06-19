@@ -1,3 +1,6 @@
+`define DEBUG_OUTPUT_MEM_READ_TRIGGERED 1
+//`undef DEBUG_OUTPUT_MEM_READ_TRIGGERED
+
 // DM (RISCV DebugSpec, DM)
 //
 module wishbone_dm_slave 
@@ -116,9 +119,11 @@ begin
             //data0_reg = 32'h12345678;
             data0_reg = 32'h87654321;
 
+`ifdef DEBUG_OUTPUT_MEM_READ_TRIGGERED
             // DEBUG - data0 update from mem_access triggered
-            //send_data = { 8'h4A };
-            //printf = ~printf;
+            send_data = { 8'h4A };
+            printf = ~printf;
+`endif
         end
 
     end
@@ -346,8 +351,8 @@ begin
                         data_o_reg = data0_reg; // present the read data
 
                         // DEBUG
-                        send_data = { 8'h30 };
-                        printf = ~printf;
+                        //send_data = { 8'h30 };
+                        //printf = ~printf;
                     end
 
                     // dm.data1 (0x05)

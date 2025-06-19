@@ -1,8 +1,8 @@
 //`define DEBUG_OUTPUT_STATE_TRANSITIONS 1
 `undef DEBUG_OUTPUT_STATE_TRANSITIONS
 
-`define DEBUG_OUTPUT_DMI_OPERATION 1
-//`undef DEBUG_OUTPUT_DMI_OPERATION
+//`define DEBUG_OUTPUT_DMI_OPERATION 1
+`undef DEBUG_OUTPUT_DMI_OPERATION
 
 //`define DEBUG_OUTPUT_ENTER_UPDATE_DR_INFO 1
 `undef DEBUG_OUTPUT_ENTER_UPDATE_DR_INFO
@@ -14,6 +14,9 @@
 // output the bits as they are shifted into DR
 //`define DEBUG_OUTPUT_SHIFT_DR_BIT 1
 `undef DEBUG_OUTPUT_SHIFT_DR_BIT
+
+`define DEBUG_OUTPUT_READ_DATA_FROM_DM 1
+//`undef DEBUG_OUTPUT_READ_DATA_FROM_DM
 
 module jtag_tap
 #(
@@ -259,10 +262,10 @@ begin
     
 end
 
-// TODO, first latch teh data into some storag registera
+// TODO, first latch the data into some storag register
 // and set a flag so that with the next jtag clock, the state
 // is copied into the dmi_data_register!
-// The once the copy has been done, reset the flag
+// Then, once the copy has been done, reset the flag
 
 reg [DMI_REGISTER_WIDTH-1:0] dmi_data_register_temp_storage_reg;
 reg toggle_reg = 1;
@@ -287,10 +290,11 @@ begin
 
         if (transaction_ack_i == 1)
         begin
-            //// DEBUG
-            ////send_data = { 8'h88 };
-            //send_data = last_read_value_i[31:24];
-            //printf = ~printf;
+`ifdef DEBUG_OUTPUT_READ_DATA_FROM_DM
+            // DEBUG
+            send_data = last_read_value_i[31:24];
+            printf = ~printf;
+`endif
 
             // place the data into the current data register
             //dmi_data_register = read_transaction_data_i;
@@ -301,13 +305,16 @@ begin
             // trigger update of the dmi_data_source register from the wishbone read transaction
             dmi_data_source_read_transaction_data = ~dmi_data_source_read_transaction_data;
         end
+/*
         else if (transaction_ack_i == 0)
         begin
+`ifdef DEBUG_OUTPUT_READ_DATA_FROM_DM
             // DEBUG
-            //send_data = { 8'h87 };
-            //send_data = read_transaction_data_i[31:24];
-            //printf = ~printf;
+            send_data = read_transaction_data_i[31:24];
+            printf = ~printf;
+`endif
         end
+*/
     end
 end
 

@@ -229,11 +229,11 @@ wishbone_dm_slave #(
     .printf(printf)
     */
 
-    /**/
+    /* */
     // printf - disabled
     .send_data(),
     .printf()
-    
+   
 
 );
 
