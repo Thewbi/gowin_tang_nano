@@ -22,7 +22,7 @@ module top(
 	input wire uart_rx,         // UART RX
 //    input wire btn1_n,          // push button 1 (active low)
     input wire jtag_clk,
-    input wire jtag_tdi,
+    input wire jtag_tdi_i,
     input wire jtag_tms,
 
     // output
@@ -31,6 +31,23 @@ module top(
     output wire jtag_tdo
 
 );
+
+/**/
+assign led[0] = ~jtag_tdi_i;
+assign led[1] = jtag_tdi_i;
+assign led[2] = ~jtag_tdi_i;
+assign led[3] = jtag_tdi_i;
+assign led[4] = ~jtag_tdi_i;
+assign led[5] = jtag_tdi_i;
+
+/*
+assign led[0] = ~jtag_clk;
+assign led[1] = jtag_clk;
+assign led[2] = ~jtag_clk;
+assign led[3] = jtag_clk;
+assign led[4] = ~jtag_clk;
+assign led[5] = jtag_clk;
+*/
 
 wire debounced_sys_rst_n_wire;
 
@@ -418,14 +435,15 @@ jtag_tap #(
     .rst_n(sys_rst_n),
     //.jtag_clk(jtag_clk),
     .jtag_clk(debounced_jtag_clk_wire),
-    .jtag_tdi(jtag_tdi),
+    //.jtag_tdi(jtag_tdi),
+    .jtag_tdi(jtag_tdi_i),
     .jtag_tms(jtag_tms),
     
     // output    
     .jtag_tdo(jtag_tdo),
 
     // debug output
-    .led_o(led),
+    //.led_o(),
 
     /**/
     // printf - enabled

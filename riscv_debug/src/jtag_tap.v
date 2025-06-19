@@ -1,6 +1,19 @@
 //`define DEBUG_OUTPUT_STATE_TRANSITIONS 1
+`undef DEBUG_OUTPUT_STATE_TRANSITIONS
+
 `define DEBUG_OUTPUT_DMI_OPERATION 1
-`define DEBUG_OUTPUT_ENTER_UPDATE_DR_INFO 1
+//`undef DEBUG_OUTPUT_DMI_OPERATION
+
+//`define DEBUG_OUTPUT_ENTER_UPDATE_DR_INFO 1
+`undef DEBUG_OUTPUT_ENTER_UPDATE_DR_INFO
+
+// output the bits as they are shifted into IR
+//`define DEBUG_OUTPUT_SHIFT_IR_BIT 1
+`undef DEBUG_OUTPUT_SHIFT_IR_BIT
+
+// output the bits as they are shifted into DR
+//`define DEBUG_OUTPUT_SHIFT_DR_BIT 1
+`undef DEBUG_OUTPUT_SHIFT_DR_BIT
 
 module jtag_tap
 #(
@@ -27,7 +40,7 @@ module jtag_tap
     // 
 
     // output - jtag - debug
-    output wire [5:0] led_o, // Tang Nano has 6 LEDs
+    //output wire [5:0] led_o, // Tang Nano has 6 LEDs
     output reg [DATA_NUM * 8 - 1:0] send_data, // printf debugging over UART
     output reg printf, // printf debugging over UART
 
@@ -47,8 +60,8 @@ module jtag_tap
 
 );
 
-reg [5:0] led;
-assign led_o = led;
+//reg [5:0] led;
+//assign led_o = led;
 
 //
 // Wishbone
@@ -362,10 +375,6 @@ begin
             if (jtag_tms == 1'b0) 
             begin
                 next_state <= RUN_TEST_IDLE;
-
-                //// DEBUG
-                //send_data = RUN_TEST_IDLE;
-                //printf = ~printf;
             end
             else
             begin
@@ -472,9 +481,11 @@ begin
 
                     DMI_INSTRUCTION:
                         begin
+`ifdef DEBUG_OUTPUT_SHIFT_DR_BIT
                             // DEBUG
-                            //send_data = dmi_shift_register[0];
-                            //printf = ~printf;
+                            send_data = jtag_tdi;
+                            printf = ~printf;
+`endif
 
                             dmi_save_register = dmi_shift_register[0];
                             dmi_shift_register = { jtag_tdi, dmi_shift_register[DMI_REGISTER_WIDTH-1:1] };
@@ -511,9 +522,11 @@ begin
 
                     DMI_INSTRUCTION:
                         begin
+`ifdef DEBUG_OUTPUT_SHIFT_DR_BIT
                             // DEBUG
-                            //send_data = dmi_shift_register[0];
-                            //printf = ~printf;
+                            send_data = jtag_tdi;
+                            printf = ~printf;
+`endif
 
                             dmi_save_register = dmi_shift_register[0];
                             dmi_shift_register = { jtag_tdi, dmi_shift_register[DMI_REGISTER_WIDTH-1:1] };
@@ -571,17 +584,21 @@ begin
                         dmi_data_source_shift = ~dmi_data_source_shift;
 
                         // start a wishbone write or read, depending on the op bits
+//                        dmi_data_register_addr_reg = dmi_data_register[43:34];
+//                        dmi_data_register_data_reg = dmi_data_register[33:2];
+//                        dmi_data_register_op_reg = dmi_data_register[1:0];
 
-                        dmi_data_register_addr_reg = dmi_data_register[43:34];
-                        dmi_data_register_data_reg = dmi_data_register[33:2];
-                        dmi_data_register_op_reg = dmi_data_register[1:0];
+                        dmi_data_register_addr_reg = dmi_shift_register[43:34];
+                        dmi_data_register_data_reg = dmi_shift_register[33:2];
+                        dmi_data_register_op_reg = dmi_shift_register[1:0];
 
                         case (dmi_data_register_op_reg)
 
-                            OP_OUTGOING_NOP: begin
+                            OP_OUTGOING_NOP: 
+                            begin
 `ifdef DEBUG_OUTPUT_DMI_OPERATION
                                 // DEBUG
-                                send_data = { 8'hF0 };
+                                send_data = { 8'hE0 };
                                 printf = ~printf;
 `endif
                                 // do not read or write
@@ -590,10 +607,11 @@ begin
                             end
 
                             // Tipp: The result of the read cycle is available in ????
-                            OP_OUTGOING_READ: begin
+                            OP_OUTGOING_READ: 
+                            begin
 `ifdef DEBUG_OUTPUT_DMI_OPERATION
                                 // DEBUG
-                                send_data = { 8'hF1 };
+                                send_data = { 8'hE1 };
                                 printf = ~printf;
 `endif
                                 // perform a read
@@ -601,10 +619,11 @@ begin
                                 start_write_transaction_o_reg = 0; // no write
                             end
 
-                            OP_OUTGOING_WRITE: begin
+                            OP_OUTGOING_WRITE: 
+                            begin
 `ifdef DEBUG_OUTPUT_DMI_OPERATION
                                 // DEBUG
-                                send_data = { 8'hF2 };
+                                send_data = { 8'hE2 };
                                 printf = ~printf;
 `endif
                                 // perform a write
@@ -612,10 +631,11 @@ begin
                                 start_write_transaction_o_reg = 1; // perform write
                             end
 
-                            OP_OUTGOING_RESERVED: begin
+                            OP_OUTGOING_RESERVED: 
+                            begin
 `ifdef DEBUG_OUTPUT_DMI_OPERATION
                                 // DEBUG
-                                send_data = { 8'hF3 };
+                                send_data = { 8'hE3 };
                                 printf = ~printf;
 `endif
                                 start_read_transaction_o_reg = 0;
@@ -626,7 +646,7 @@ begin
                             begin
 `ifdef DEBUG_OUTPUT_DMI_OPERATION
                                 // DEBUG
-                                send_data = { 8'hF4 };
+                                send_data = { 8'hE4 };
                                 printf = ~printf;
 `endif
                                 start_read_transaction_o_reg = 0;
@@ -707,11 +727,14 @@ begin
                         // trigger that dmi_data_source from the dmi_shift_register
                         dmi_data_source_shift = ~dmi_data_source_shift;
 
-                        // start a wishbone write or read, depending on the op bits
+                        //// start a wishbone write or read, depending on the op bits
+//                        dmi_data_register_addr_reg = dmi_data_register[43:34];
+//                        dmi_data_register_data_reg = dmi_data_register[33:2];
+//                        dmi_data_register_op_reg = dmi_data_register[1:0];
 
-                        dmi_data_register_addr_reg = dmi_data_register[43:34];
-                        dmi_data_register_data_reg = dmi_data_register[33:2];
-                        dmi_data_register_op_reg = dmi_data_register[1:0];
+                        dmi_data_register_addr_reg = dmi_shift_register[43:34];
+                        dmi_data_register_data_reg = dmi_shift_register[33:2];
+                        dmi_data_register_op_reg = dmi_shift_register[1:0];
 
                         case (dmi_data_register_op_reg)
 
@@ -719,7 +742,7 @@ begin
                             begin
 `ifdef DEBUG_OUTPUT_DMI_OPERATION
                                 // DEBUG
-                                send_data = { 8'hE0 };
+                                send_data = { 8'hF0 };
                                 printf = ~printf;
 `endif
 
@@ -732,7 +755,7 @@ begin
                             begin
 `ifdef DEBUG_OUTPUT_DMI_OPERATION
                                 // DEBUG
-                                send_data = { 8'hE1 };
+                                send_data = { 8'hF1 };
                                 printf = ~printf;
 `endif
 
@@ -745,7 +768,7 @@ begin
                             begin
 `ifdef DEBUG_OUTPUT_DMI_OPERATION
                                 // DEBUG
-                                send_data = { 8'hE2 };
+                                send_data = { 8'hF2 };
                                 printf = ~printf;
 `endif
 
@@ -758,7 +781,7 @@ begin
                             begin
 `ifdef DEBUG_OUTPUT_DMI_OPERATION
                                 // DEBUG
-                                send_data = { 8'hE3 };
+                                send_data = { 8'hF3 };
                                 printf = ~printf;
 `endif
 
@@ -770,7 +793,7 @@ begin
                             begin
 `ifdef DEBUG_OUTPUT_DMI_OPERATION
                                 // DEBUG
-                                send_data = { 8'hE4 };
+                                send_data = { 8'hF4 };
                                 printf = ~printf;
 `endif
                                 start_read_transaction_o_reg <= 0;
@@ -851,17 +874,34 @@ begin
         begin                
             if (jtag_tms == 1'b0) 
             begin
+`ifdef DEBUG_OUTPUT_SHIFT_IR_BIT
+                // DEBUG
+                send_data = jtag_tdi;
+                printf = ~printf;
+`endif
+
                 // during SHIFT_IR
-                ir_save_register <= ir_shift_register[0];
-                ir_shift_register <= { jtag_tdi, ir_shift_register[31:1] };
+                ir_save_register = ir_shift_register[0];
+                ir_shift_register = { jtag_tdi, ir_shift_register[31:1] };
+
+
 
                 next_state = cur_state;
             end
             else
             begin
+
+`ifdef DEBUG_OUTPUT_SHIFT_IR_BIT
+                // DEBUG
+                send_data = jtag_tdi;
+                printf = ~printf;
+`endif
+
                 // on exit: SHIFT_IR
-                ir_save_register <= ir_shift_register[0];
-                ir_shift_register <= { jtag_tdi, ir_shift_register[31:1] };
+                ir_save_register = ir_shift_register[0];
+                ir_shift_register = { jtag_tdi, ir_shift_register[31:1] };
+
+
 
                 // on enter: EXIT1_IR
                 // nop
