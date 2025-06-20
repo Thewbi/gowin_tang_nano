@@ -1,3 +1,12 @@
+//`define DEBUG_OUTPUT_END_OF_READ_TRANSACTION 1
+`undef DEBUG_OUTPUT_END_OF_READ_TRANSACTION
+
+//`define DEBUG_OUTPUT_INIT_READ_DATA 1
+`undef DEBUG_OUTPUT_INIT_READ_DATA
+
+`define DEBUG_OUTPUT_STOP_READ_DATA 1
+//`undef DEBUG_OUTPUT_STOP_READ_DATA
+
 module wishbone_master 
 #(
     parameter DATA_NUM = 16
@@ -98,6 +107,8 @@ begin
     if (start_read_transaction_i_reg_old != start_read_transaction_i)
     begin
         start_read_transaction_i_reg_old = start_read_transaction_i;
+
+        // start a read transaction
         start_read_transaction_i_reg = start_read_transaction_i;
     end
 
@@ -105,6 +116,8 @@ begin
     if (start_write_transaction_i_reg_old != start_write_transaction_i)
     begin
         start_write_transaction_i_reg_old = start_write_transaction_i;
+
+        // 
         start_write_transaction_i_reg = start_write_transaction_i;
     end
 
@@ -115,11 +128,14 @@ begin
         // this is the end of a read cycle, data_i contains the read data from the slave
         if (start_read_transaction_i_reg == 1)
         begin
-            //// DEBUG printf
-            //send_data = { 8'h66 };
-            //printf = ~printf;
+`ifdef DEBUG_OUTPUT_END_OF_READ_TRANSACTION
+            // DEBUG printf
+            send_data = { 8'h66 };
+            printf = ~printf;
+`endif
         end
 
+        // this is the end of a read cycle, data_i contains the read data from the slave
         start_read_transaction_i_reg = 0;
         start_write_transaction_i_reg = 0;
     end
@@ -131,9 +147,12 @@ begin
 
     if (cur_state == INIT_READ)
     begin
+`ifdef DEBUG_OUTPUT_INIT_READ_DATA
         // DEBUG printf - print first byte of received DWORD
-        send_data = { 8'h1A };
+        //send_data = { 8'h1A };
+        send_data = data_i[31:24];
         printf = ~printf;
+`endif
 
         wishbone_master_ack_o_reg = 0;
         last_read_value_reg  = data_i;
@@ -141,10 +160,12 @@ begin
 
     if (cur_state == STOP_READ)
     begin
+`ifdef DEBUG_OUTPUT_STOP_READ_DATA
         // DEBUG printf - print first byte of received DWORD
         //send_data = { 8'h1B };
         send_data = data_i[31:24];
         printf = ~printf;
+`endif
 
         // keep data in a separate store so that the JTAG / TAP can collect it any time
         wishbone_master_ack_o_reg = 1;

@@ -1,5 +1,16 @@
-`define DEBUG_OUTPUT_MEM_READ_TRIGGERED 1
-//`undef DEBUG_OUTPUT_MEM_READ_TRIGGERED
+// the JTAG client has performed a abstract command via writing to DM.command 
+// The abstract command is a "read from memory" (not a write!)
+// This is NOT a read from data0!!!
+//`define DEBUG_OUTPUT_MEM_READ_TRIGGERED 1
+`undef DEBUG_OUTPUT_MEM_READ_TRIGGERED
+
+//`define DEBUG_OUTPUT_DATA0_REG_WRITE 1
+`undef DEBUG_OUTPUT_DATA0_REG_WRITE
+
+`define DEBUG_OUTPUT_DATA0_REG_READ 1
+//`undef DEBUG_OUTPUT_DATA0_REG_READ
+
+// TODO: read from data0
 
 // DM (RISCV DebugSpec, DM)
 //
@@ -78,15 +89,22 @@ localparam HARTRESET = 29;
 // DualSource Registers
 //
 
-// hog
+// data0_source_write_reg is used to fill data0_reg with data from
+// the abstract command "write_register" instead of filling data0_reg with a value from 
+// the abstract command "read_memory" (e.g. by reading a value from a RAM address) 
+// If you want to execute an abstract command "read_memory", you have to 
+// toggle 'data0_source_mem_access_data'
 reg data0_source_write_reg_old = 0;
 reg data0_source_write_reg = 0;
 
+// data0_source_mem_access_data is used to fill data0_reg with data from
+// the internal system (e.g. by reading a value from a RAM address using abstract command "read_memory") 
+// instead of filling data0_reg with a value from an abstract command "write_register".
+// If you want to execute an abstract command "write_register", you have to 
+// toggle 'data0_source_write_reg'
 reg data0_source_mem_access_data_old = 0;
 reg data0_source_mem_access_data = 0;
 
-// hog
-//
 // this block is here because the register 'data0_reg' has to 
 // be updated by the write register command and also from read memory command
 always @(posedge clk_i)
@@ -108,6 +126,12 @@ begin
 
             // update data0_reg
             data0_reg = data_i[31:0];
+
+`ifdef DEBUG_OUTPUT_DATA0_REG_WRITE
+            // DEBUG - data0 update from mem_access triggered
+            send_data = { 8'h4A };
+            printf = ~printf;
+`endif
         end
 
         // data0_reg is assigned the wishbone transaction result
@@ -115,13 +139,26 @@ begin
         begin
             data0_source_mem_access_data_old = data0_source_mem_access_data;
 
+            // the JTAG client has performed a abstract command via writing to DM.command 
+            // The abstract command is a "read from memory" (not a write!)
+            // This is NOT a read from data0!!!
+
             // update data0_reg
             //data0_reg = 32'h12345678;
             data0_reg = 32'h87654321;
 
+            // test if arg0 has been written with the address
+            // To perform this test, just do not override data0_reg
+
+`ifdef DEBUG_OUTPUT_DATA0_REG_WRITE
+            // DEBUG - data0 update from mem_access triggered
+            send_data = { 8'h4B };
+            printf = ~printf;
+`endif
+
 `ifdef DEBUG_OUTPUT_MEM_READ_TRIGGERED
             // DEBUG - data0 update from mem_access triggered
-            send_data = { 8'h4A };
+            send_data = { 8'h4C };
             printf = ~printf;
 `endif
         end
@@ -153,6 +190,7 @@ localparam WRITE = 2;
 reg [1:0] cur_state = IDLE;
 reg [1:0] next_state;
 
+/*
 // print feedback and execute commands
 //
 // this block prints feedback only when the register gets a new value
@@ -178,6 +216,9 @@ begin
         begin
             data0_reg_updated_old = data0_reg_updated;
 
+            // execute update to data0 register from wishbone write transaction is triggered in ???
+            // data0 has two input source (internal memory and wishobe write transaction)
+asdf
             //// DEBUG
             //send_data = { 8'h04 };
             //printf = ~printf;
@@ -218,14 +259,11 @@ begin
             //printf = ~printf;
             
         end
-        // dm.command (0x17) - writing (0x17, the command register) allows the DTM to execute abstract commands in the DM.
+        // dm.command (0x17) - writing (0x17, the command register) allows the DTM 
+        // to execute abstract commands in the DM.
         else if (command_reg_updated_old != command_reg_updated)
         begin
             command_reg_updated_old = command_reg_updated;
-
-            // TODO: execute the abstract command! (e.g. access memory)
-            // FOR NOW; return value 0x12345678 into arg0 (which is data0, in XLEN=32 bit)
-            data0_source_mem_access_data = ~data0_source_mem_access_data;
 
             //// DEBUG - data0 update from mem_access triggered
             //send_data = { 8'h49 };
@@ -234,6 +272,7 @@ begin
 
     end
 end
+*/
 
 // next state logic + write operation
 always @(posedge clk_i) 
@@ -267,10 +306,10 @@ begin
 
                 // write dm.data0 (0x04)
                 ADDRESS_DM_DATA0_REGISTER:
-                begin 
-                    // hog
-                    //data0_reg = data_i; // store the written value into the data0 register of this DM
-
+                begin
+                    // data0_reg is indirectly written to (using the toggle bit) because
+                    // data0_reg can also be update by another abstract command (read_memory!)
+                    // so data0_reg has two sources
                     data0_source_write_reg = ~data0_source_write_reg;
                 end
 
@@ -350,9 +389,11 @@ begin
                     begin
                         data_o_reg = data0_reg; // present the read data
 
-                        // DEBUG
-                        //send_data = { 8'h30 };
-                        //printf = ~printf;
+`ifdef DEBUG_OUTPUT_DATA0_REG_READ
+                        // DEBUG - data0 update from mem_access triggered
+                        send_data = { 8'h30 };
+                        printf = ~printf;
+`endif
                     end
 
                     // dm.data1 (0x05)
@@ -480,30 +521,36 @@ begin
 
                         // write dm.data0 (0x04)
                         ADDRESS_DM_DATA0_REGISTER:
-                        begin                    
-                            data0_reg_updated = ~data0_reg_updated;
+                        begin
+                            data0_reg_updated = ~data0_reg_updated; // just used for DEBUG logging
                         end
 
                         // write dm.data1 (0x05)
                         ADDRESS_DM_DATA1_REGISTER:
                         begin
-                            data1_reg_updated = ~data1_reg_updated;
+                            data1_reg_updated = ~data1_reg_updated; // just used for DEBUG logging
                         end
 
                         // write dm.control (0x11)
                         ADDRESS_DM_CONTROL_REGISTER:
                         begin
-                            control_reg_updated = ~control_reg_updated;
+                            control_reg_updated = ~control_reg_updated; // just used for DEBUG logging
                         end
 
                         // write dm.command (0x17)
                         ADDRESS_DM_COMMAND_REGISTER:
                         begin
-                            command_reg_updated = ~command_reg_updated;
+                            command_reg_updated = ~command_reg_updated; // just used for DEBUG logging
 
-                            //// DEBUG - data0 update from mem_access triggered
-                            //send_data = { 8'h48 };
-                            //printf = ~printf;
+                            // TODO: execute the abstract command! (e.g. access memory)
+                            // FOR NOW; return value 0x12345678 into arg0 (which is data0, in XLEN=32 bit)
+
+                            // data0_source_mem_access_data is used to fill data0_reg with data from
+                            // the internal system (e.g. by reading a value from a RAM address) instead
+                            // of filling data0_reg with a value from an abstract command "write_register".
+                            // If you want to execute an abstract command "write_register", you have to 
+                            // toggle 'data0_source_write_reg'
+                            data0_source_mem_access_data = ~data0_source_mem_access_data;
                         end
 
                         default:
@@ -518,9 +565,7 @@ begin
             else
             begin
                 data_o_reg = ZERO_VALUE;
-
                 ack_o_reg = 0;
-
                 next_state = IDLE;
             end
         end

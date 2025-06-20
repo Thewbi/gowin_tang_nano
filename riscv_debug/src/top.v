@@ -181,16 +181,17 @@ wishbone_master #(
     .wishbone_master_ack_o(wishbone_master_ack), // the wishbone master communicates to the JTAG_TAP that the transaction is over
     .last_read_value_o(last_read_value),
 
-    /*
+    /**/
     // printf - enabled
     .send_data(send_data),
     .printf(printf)    
-    */
-    /**/
+    
+
+    /*
     // printf - disabled
     .send_data(),
     .printf()
-    
+    */
 );
 
 //
@@ -445,17 +446,17 @@ jtag_tap #(
     // debug output
     //.led_o(),
 
-    /**/
+    /*
     // printf - enabled
     .send_data(send_data),
     .printf(printf),
-    
+    */
 
-    /*
+    /**/
     // printf - disabled
     .send_data(),
     .printf(),
-*/
+    
 
     //
     // Wishbone
