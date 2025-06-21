@@ -1,3 +1,12 @@
+//`define DEBUG_OUTPUT_DM_WB_SLAVE 1
+`undef DEBUG_OUTPUT_DM_WB_SLAVE
+
+`define DEBUG_OUTPUT_WB_MASTER 1
+//`undef DEBUG_OUTPUT_WB_MASTER
+
+//`define DEBUG_OUTPUT_JTAG_TAP 1
+`undef DEBUG_OUTPUT_JTAG_TAP
+
 // the state machine that runs the demo application has three states: IDLE, SEND and WAIT
 //
 // IDLE is entered on reset. IDLE immediately transitions to SEND.
@@ -181,17 +190,15 @@ wishbone_master #(
     .wishbone_master_ack_o(wishbone_master_ack), // the wishbone master communicates to the JTAG_TAP that the transaction is over
     .last_read_value_o(last_read_value),
 
-    /**/
+`ifdef DEBUG_OUTPUT_WB_MASTER
     // printf - enabled
     .send_data(send_data),
     .printf(printf)    
-    
-
-    /*
+`else
     // printf - disabled
     .send_data(),
     .printf()
-    */
+`endif
 );
 
 //
@@ -224,17 +231,15 @@ wishbone_dm_slave #(
     //.led_port_o(led), // output to the LEDs port
     .led_port_o(),
 
-    /*
+`ifdef DEBUG_OUTPUT_DM_WB_SLAVE
     // printf - enabled
     .send_data(send_data),
     .printf(printf)
-    */
-
-    /* */
+`else
     // printf - disabled
     .send_data(),
     .printf()
-   
+`endif   
 
 );
 
@@ -446,17 +451,15 @@ jtag_tap #(
     // debug output
     //.led_o(),
 
-    /*
+`ifdef DEBUG_OUTPUT_JTAG_TAP
     // printf - enabled
     .send_data(send_data),
     .printf(printf),
-    */
-
-    /**/
+`else
     // printf - disabled
     .send_data(),
     .printf(),
-    
+`endif
 
     //
     // Wishbone

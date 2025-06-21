@@ -119,6 +119,7 @@ begin
     else 
     begin
 
+        // This case is for the abstract command to write into a register
         // data0_reg is assigned the ... register
         if (data0_source_write_reg_old != data0_source_write_reg)
         begin
@@ -139,12 +140,14 @@ begin
         begin
             data0_source_mem_access_data_old = data0_source_mem_access_data;
 
-            // the JTAG client has performed a abstract command via writing to DM.command 
-            // The abstract command is a "read from memory" (not a write!)
+            // the JTAG client has performed a abstract command via writing to DM.command
             // This is NOT a read from data0!!!
+            
+            // The abstract command might be a "read from memory" (not a write!)
+            // The abstract command might be a "write to memory" (not a read!)
+            // TODO add logic to identify and handle commands
 
-            // update data0_reg
-            //data0_reg = 32'h12345678;
+            // update data0_reg with dummy value for now
             data0_reg = 32'h87654321;
 
             // test if arg0 has been written with the address

@@ -149,7 +149,6 @@ begin
     begin
 `ifdef DEBUG_OUTPUT_INIT_READ_DATA
         // DEBUG printf - print first byte of received DWORD
-        //send_data = { 8'h1A };
         send_data = data_i[31:24];
         printf = ~printf;
 `endif
@@ -162,7 +161,6 @@ begin
     begin
 `ifdef DEBUG_OUTPUT_STOP_READ_DATA
         // DEBUG printf - print first byte of received DWORD
-        //send_data = { 8'h1B };
         send_data = data_i[31:24];
         printf = ~printf;
 `endif

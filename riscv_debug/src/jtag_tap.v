@@ -18,6 +18,9 @@
 `define DEBUG_OUTPUT_READ_DATA_FROM_DM 1
 //`undef DEBUG_OUTPUT_READ_DATA_FROM_DM
 
+//`define DEBUG_OUTPUT_WRITE_READ_VALUE_TO_DMI_DATA_REGISTER 1
+`undef DEBUG_OUTPUT_WRITE_READ_VALUE_TO_DMI_DATA_REGISTER
+
 module jtag_tap
 #(
     parameter DATA_NUM = 16 // for printf
@@ -53,7 +56,7 @@ module jtag_tap
 
     input wire [63:0] read_transaction_data_i, // data that the wishbone master has read out of the slave
     input wire transaction_ack_i, // wishbone transaction is over
-    input wire [63:0] last_read_value_i,
+    input wire [63:0] last_read_value_i, // data that the wishbone master has read out of the slave
 
     output wire start_read_transaction_o,
     output wire start_write_transaction_o,
@@ -319,8 +322,6 @@ begin
 end
 
 
-// ako
-//
 // this block is here because the register 'dmi_data_register' has to 
 // be updated by the UPDATE machine state and also from a wishbone transaction
 always @(posedge clk)
@@ -344,12 +345,24 @@ begin
     begin
         dmi_data_source_read_transaction_data_old = dmi_data_source_read_transaction_data;
 
-        //// DEBUG
-        //send_data = read_transaction_data_i[31:24];
-        //printf = ~printf;
-
+/*
+`ifdef DEBUG_OUTPUT_WRITE_READ_VALUE_TO_DMI_DATA_REGISTER
+        // DEBUG
+        send_data = read_transaction_data_i[31:24];
+        printf = ~printf;
+`endif
         // update dmi_data_register
         dmi_data_register = read_transaction_data_i[31:0];
+*/
+
+`ifdef DEBUG_OUTPUT_WRITE_READ_VALUE_TO_DMI_DATA_REGISTER
+        // DEBUG
+        send_data = last_read_value_i[31:24];
+        printf = ~printf;
+`endif
+        // update dmi_data_register
+        dmi_data_register = last_read_value_i[31:0];
+        
     end
 end
 
