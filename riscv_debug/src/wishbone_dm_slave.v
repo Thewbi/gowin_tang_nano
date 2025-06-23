@@ -1,14 +1,14 @@
 // the JTAG client has performed a abstract command via writing to DM.command 
 // The abstract command is a "read from memory" (not a write!)
 // This is NOT a read from data0!!!
-//`define DEBUG_OUTPUT_MEM_READ_TRIGGERED 1
-`undef DEBUG_OUTPUT_MEM_READ_TRIGGERED
+`define DEBUG_OUTPUT_MEM_READ_TRIGGERED 1
+//`undef DEBUG_OUTPUT_MEM_READ_TRIGGERED
 
 //`define DEBUG_OUTPUT_DATA0_REG_WRITE 1
 `undef DEBUG_OUTPUT_DATA0_REG_WRITE
 
-`define DEBUG_OUTPUT_DATA0_REG_READ 1
-//`undef DEBUG_OUTPUT_DATA0_REG_READ
+//`define DEBUG_OUTPUT_DATA0_REG_READ 1
+`undef DEBUG_OUTPUT_DATA0_REG_READ
 
 // TODO: read from data0
 
@@ -32,6 +32,7 @@ module wishbone_dm_slave
     input wire stb_i, // master starts and terminates strobes
 
     // input - custom input goes here ...
+    input wire [31:0] instr_i,
 
     // output (slaves)
     output wire [63:0] data_o, // data that the slave produces
@@ -41,6 +42,7 @@ module wishbone_dm_slave
 
     // output - custom output goes here ...
     output wire [5:0] led_port_o,
+    output wire [31:0] pc_o,
 
     // printf - needs to be enabled in top module by assigning values to these two ports
     // does not work because this state machine is not clocked and this causes a cycle in the tree
@@ -81,6 +83,9 @@ reg [63:0] command_reg = ZERO_VALUE;
 reg command_reg_updated = ZERO_VALUE;
 reg command_reg_updated_old = ZERO_VALUE;
 
+reg [31:0] pc_o_reg;
+assign pc_o = pc_o_reg;
+
 localparam HALTREQ = 31;
 localparam RESUMEREQ = 30;
 localparam HARTRESET = 29;
@@ -105,6 +110,13 @@ reg data0_source_write_reg = 0;
 reg data0_source_mem_access_data_old = 0;
 reg data0_source_mem_access_data = 0;
 
+reg [7:0] abstr_cmdtype_reg;
+reg       abstr_aamvirtual_reg;
+reg [2:0] abstr_aamsize_reg;
+reg       abstr_aampostincrement_reg;
+reg       abstr_write_reg;
+reg [1:0] abstr_target_specific_reg;
+
 // this block is here because the register 'data0_reg' has to 
 // be updated by the write register command and also from read memory command
 always @(posedge clk_i)
@@ -128,6 +140,8 @@ begin
             // update data0_reg
             data0_reg = data_i[31:0];
 
+            
+
 `ifdef DEBUG_OUTPUT_DATA0_REG_WRITE
             // DEBUG - data0 update from mem_access triggered
             send_data = { 8'h4A };
@@ -140,15 +154,60 @@ begin
         begin
             data0_source_mem_access_data_old = data0_source_mem_access_data;
 
-            // the JTAG client has performed a abstract command via writing to DM.command
+            // the JTAG client has performed an abstract command via writing to DM.command
             // This is NOT a read from data0!!!
             
             // The abstract command might be a "read from memory" (not a write!)
             // The abstract command might be a "write to memory" (not a read!)
             // TODO add logic to identify and handle commands
 
+            abstr_cmdtype_reg = data_i[31:24]; // 0x02 is read from memory
+            abstr_aamvirtual_reg = data_i[23]; // aamvirtual - 0 == no virtual memory translation
+            abstr_aamsize_reg = data_i[22:20]; // aamsize == 2dec = 32 bit data transfer
+            abstr_aampostincrement_reg = data_i[19]; // aampostincrement - 0 = no postincrement
+            abstr_write_reg = data_i[16]; // write - (0 == write, 1 == read)
+            abstr_target_specific_reg = data_i[15:14];
+
+            case (abstr_cmdtype_reg)
+
+                8'h02:
+                begin
+
+                    case (abstr_write_reg)
+
+                        8'h00: // write
+                        begin
+`ifdef DEBUG_OUTPUT_MEM_READ_TRIGGERED
+                            // DEBUG - data0 update from mem_access triggered
+                            send_data = { 8'h4C };
+                            printf = ~printf;
+`endif                    
+                        end
+
+                        8'h01: // read
+                        begin
+`ifdef DEBUG_OUTPUT_MEM_READ_TRIGGERED
+                            // DEBUG - data0 update from mem_access triggered
+                            send_data = { 8'h4D };
+                            printf = ~printf;
+`endif                    
+
+
+                            pc_o_reg = 32'h00;
+                            
+                            // update data0_reg with dummy value for now
+                            data0_reg = instr_i;
+
+                        end
+                        
+                    endcase
+
+                end
+
+            endcase
+
             // update data0_reg with dummy value for now
-            data0_reg = 32'h87654321;
+            //data0_reg = 32'h87654321;
 
             // test if arg0 has been written with the address
             // To perform this test, just do not override data0_reg
@@ -159,11 +218,7 @@ begin
             printf = ~printf;
 `endif
 
-`ifdef DEBUG_OUTPUT_MEM_READ_TRIGGERED
-            // DEBUG - data0 update from mem_access triggered
-            send_data = { 8'h4C };
-            printf = ~printf;
-`endif
+
         end
 
     end
@@ -193,89 +248,6 @@ localparam WRITE = 2;
 reg [1:0] cur_state = IDLE;
 reg [1:0] next_state;
 
-/*
-// print feedback and execute commands
-//
-// this block prints feedback only when the register gets a new value
-// Although the register value is update on each write!
-always @(posedge clk_i)
-begin
-
-    if (rst_i) 
-    begin
-        // STEP 1 - add line for new register here        
-        //data0_reg_updated_old = ZERO_VALUE;
-        data1_reg_updated_old = ZERO_VALUE;
-        control_reg_updated_old = ZERO_VALUE;
-        command_reg_updated_old = ZERO_VALUE;
-    end
-    else
-    begin
-
-        // STEP 2 - add branch for new register here
-
-        // dm.data0 (0x04)
-        if (data0_reg_updated_old != data0_reg_updated)
-        begin
-            data0_reg_updated_old = data0_reg_updated;
-
-            // execute update to data0 register from wishbone write transaction is triggered in ???
-            // data0 has two input source (internal memory and wishobe write transaction)
-asdf
-            //// DEBUG
-            //send_data = { 8'h04 };
-            //printf = ~printf;
-        end
-        // dm.data1 (0x05)
-        else if (data1_reg_updated_old != data1_reg_updated)
-        begin
-            data1_reg_updated_old = data1_reg_updated;
-
-            //// DEBUG
-            //send_data = { 8'h05 };
-            //printf = ~printf;
-
-            //data1_reg = data_i[31:0];
-        end
-        // dm.control (0x10)
-        else if (control_reg_updated_old != control_reg_updated)
-        begin
-            control_reg_updated_old = control_reg_updated;
-
-            if (control_reg[HALTREQ] == 1'b1)
-            begin
-                //// DEBUG
-                //send_data = { 8'h10 };
-            end
-            else if (control_reg[RESUMEREQ] == 1'b1)
-            begin
-                //// DEBUG
-                //send_data = { 8'h11 };
-            end
-            else if (control_reg[HARTRESET] == 1'b1)
-            begin
-                //// DEBUG
-                //send_data = { 8'h12 };
-            end
-
-            //// DEBUG
-            //printf = ~printf;
-            
-        end
-        // dm.command (0x17) - writing (0x17, the command register) allows the DTM 
-        // to execute abstract commands in the DM.
-        else if (command_reg_updated_old != command_reg_updated)
-        begin
-            command_reg_updated_old = command_reg_updated;
-
-            //// DEBUG - data0 update from mem_access triggered
-            //send_data = { 8'h49 };
-            //printf = ~printf;
-        end
-
-    end
-end
-*/
 
 // next state logic + write operation
 always @(posedge clk_i) 

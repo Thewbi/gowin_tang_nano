@@ -6,13 +6,15 @@
 // Does not allow the output of the switch to change unless the switch is
 // steady for enough time (not toggling).
 ///////////////////////////////////////////////////////////////////////////////
-module Debounce_Switch(
+module Debounce_Switch
+#(
+    parameter DEBOUNCE_LIMIT = 250000 // 10 ms at 25 MHz
+)
+(
     input i_Clk,
     input i_Switch,
     output o_Switch
 );
-
-    localparam c_DEBOUNCE_LIMIT = 250000; // 10 ms at 25 MHz
 
     reg [24:0] r_Count = 1'b0;
 
@@ -23,11 +25,11 @@ module Debounce_Switch(
     begin
         // switch input is different than internal switch value, so an input is
         // changing. Increase the counter until it is stable for enough time.
-        if (i_Switch !== r_State && r_Count < c_DEBOUNCE_LIMIT)
+        if (i_Switch !== r_State && r_Count < DEBOUNCE_LIMIT)
         begin
             r_Count <= r_Count + 25'b1;            
         end
-        else if (r_Count == c_DEBOUNCE_LIMIT) 
+        else if (r_Count == DEBOUNCE_LIMIT) 
         begin
             // end of counter reached, switch is stable, register it, reset counter
             r_State <= i_Switch;
@@ -38,8 +40,6 @@ module Debounce_Switch(
             // switches are the same state, reset the counter
             r_Count <= 25'b0;
         end
-    end
-
-    
+    end    
 
 endmodule

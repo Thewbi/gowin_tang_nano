@@ -1,8 +1,8 @@
-//`define DEBUG_OUTPUT_DM_WB_SLAVE 1
-`undef DEBUG_OUTPUT_DM_WB_SLAVE
+`define DEBUG_OUTPUT_DM_WB_SLAVE 1
+//`undef DEBUG_OUTPUT_DM_WB_SLAVE
 
-`define DEBUG_OUTPUT_WB_MASTER 1
-//`undef DEBUG_OUTPUT_WB_MASTER
+//`define DEBUG_OUTPUT_WB_MASTER 1
+`undef DEBUG_OUTPUT_WB_MASTER
 
 //`define DEBUG_OUTPUT_JTAG_TAP 1
 `undef DEBUG_OUTPUT_JTAG_TAP
@@ -60,7 +60,7 @@ assign led[5] = jtag_clk;
 
 wire debounced_sys_rst_n_wire;
 
-// Instantiate Debounce Module
+// Instantiate Debounce Module for the reset button
 Debounce_Switch debounce_sys_rst_n
 (
     .i_Clk(sys_clk), 
@@ -71,9 +71,13 @@ Debounce_Switch debounce_sys_rst_n
 /**/
 wire debounced_jtag_clk_wire;
 
-// Instantiate Debounce Module
-Debounce_Switch debounce_jtag_clk
-(
+// Instantiate Debounce Module for the debounce JTAG
+Debounce_Switch 
+#(
+    //.DEBOUNCE_LIMIT(250000)
+    .DEBOUNCE_LIMIT(250000) // 250000 = 10 ms at 25 MHz
+)
+debounce_jtag_clk (
     .i_Clk(sys_clk), 
     .i_Switch(jtag_clk),
     .o_Switch(debounced_jtag_clk_wire)
@@ -120,12 +124,12 @@ wire printf;
 // RISCV CPU
 //
 
-reg [31:0] PC_reg;
 wire [31:0] PC;
-assign PC = PC_reg;
+//reg [31:0] PC_reg;
+//assign PC = PC_reg;
 
-reg [31:0] Instr_reg;
 wire [31:0] Instr;
+reg [31:0] Instr_reg;
 assign Instr = Instr_reg;
 
 // instruction memory
@@ -222,6 +226,7 @@ wishbone_dm_slave #(
     .stb_i(stb),
 
     // input custom
+    .instr_i(Instr),
 
     // output slave
     .data_o(read_data), // the slave returns the read data to the master from .data_o
@@ -230,6 +235,7 @@ wishbone_dm_slave #(
     // output wbi
     //.led_port_o(led), // output to the LEDs port
     .led_port_o(),
+    .pc_o(PC),
 
 `ifdef DEBUG_OUTPUT_DM_WB_SLAVE
     // printf - enabled

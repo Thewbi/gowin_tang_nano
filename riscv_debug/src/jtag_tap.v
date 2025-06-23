@@ -603,11 +603,6 @@ begin
                         // trigger that dmi_data_source from the dmi_shift_register
                         dmi_data_source_shift = ~dmi_data_source_shift;
 
-                        // start a wishbone write or read, depending on the op bits
-//                        dmi_data_register_addr_reg = dmi_data_register[43:34];
-//                        dmi_data_register_data_reg = dmi_data_register[33:2];
-//                        dmi_data_register_op_reg = dmi_data_register[1:0];
-
                         dmi_data_register_addr_reg = dmi_shift_register[43:34];
                         dmi_data_register_data_reg = dmi_shift_register[33:2];
                         dmi_data_register_op_reg = dmi_shift_register[1:0];
@@ -746,11 +741,6 @@ begin
                         //
                         // trigger that dmi_data_source from the dmi_shift_register
                         dmi_data_source_shift = ~dmi_data_source_shift;
-
-                        //// start a wishbone write or read, depending on the op bits
-//                        dmi_data_register_addr_reg = dmi_data_register[43:34];
-//                        dmi_data_register_data_reg = dmi_data_register[33:2];
-//                        dmi_data_register_op_reg = dmi_data_register[1:0];
 
                         dmi_data_register_addr_reg = dmi_shift_register[43:34];
                         dmi_data_register_data_reg = dmi_shift_register[33:2];
@@ -894,6 +884,7 @@ begin
         begin                
             if (jtag_tms == 1'b0) 
             begin
+
 `ifdef DEBUG_OUTPUT_SHIFT_IR_BIT
                 // DEBUG
                 send_data = jtag_tdi;
@@ -903,8 +894,6 @@ begin
                 // during SHIFT_IR
                 ir_save_register = ir_shift_register[0];
                 ir_shift_register = { jtag_tdi, ir_shift_register[31:1] };
-
-
 
                 next_state = cur_state;
             end
@@ -920,8 +909,6 @@ begin
                 // on exit: SHIFT_IR
                 ir_save_register = ir_shift_register[0];
                 ir_shift_register = { jtag_tdi, ir_shift_register[31:1] };
-
-
 
                 // on enter: EXIT1_IR
                 // nop
@@ -975,8 +962,6 @@ begin
             if (jtag_tms == 1'b0) 
             begin
                 // on enter: SHIFT_IR
-                // nop
-
                 next_state <= SHIFT_IR;
 
             end
