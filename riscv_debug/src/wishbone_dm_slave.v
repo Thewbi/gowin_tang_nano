@@ -1,14 +1,20 @@
 // the JTAG client has performed a abstract command via writing to DM.command 
 // The abstract command is a "read from memory" (not a write!)
 // This is NOT a read from data0!!!
-`define DEBUG_OUTPUT_MEM_READ_TRIGGERED 1
-//`undef DEBUG_OUTPUT_MEM_READ_TRIGGERED
+//`define DEBUG_OUTPUT_MEM_READ_TRIGGERED 1
+`undef DEBUG_OUTPUT_MEM_READ_TRIGGERED
 
 //`define DEBUG_OUTPUT_DATA0_REG_WRITE 1
 `undef DEBUG_OUTPUT_DATA0_REG_WRITE
 
+`define DEBUG_OUTPUT_DATA1_REG_WRITE 1
+//`undef DEBUG_OUTPUT_DATA1_REG_WRITE
+
 //`define DEBUG_OUTPUT_DATA0_REG_READ 1
 `undef DEBUG_OUTPUT_DATA0_REG_READ
+
+//`define DEBUG_OUTPUT_DATA1_REG_READ 1
+`undef DEBUG_OUTPUT_DATA1_REG_READ
 
 // TODO: read from data0
 
@@ -138,9 +144,7 @@ begin
             data0_source_write_reg_old = data0_source_write_reg;
 
             // update data0_reg
-            data0_reg = data_i[31:0];
-
-            
+            data0_reg = data_i[31:0];            
 
 `ifdef DEBUG_OUTPUT_DATA0_REG_WRITE
             // DEBUG - data0 update from mem_access triggered
@@ -190,11 +194,11 @@ begin
                             // DEBUG - data0 update from mem_access triggered
                             send_data = { 8'h4D };
                             printf = ~printf;
-`endif                    
+`endif
 
+                            // memory address is expected in data1
+                            pc_o_reg = data1_reg[31:0];
 
-                            pc_o_reg = 32'h00;
-                            
                             // update data0_reg with dummy value for now
                             data0_reg = instr_i;
 
@@ -217,7 +221,6 @@ begin
             send_data = { 8'h4B };
             printf = ~printf;
 `endif
-
 
         end
 
@@ -247,7 +250,6 @@ localparam WRITE = 2;
 // current and next_state
 reg [1:0] cur_state = IDLE;
 reg [1:0] next_state;
-
 
 // next state logic + write operation
 always @(posedge clk_i) 
@@ -292,6 +294,12 @@ begin
                 ADDRESS_DM_DATA1_REGISTER:
                 begin
                     data1_reg = data_i; // store the written value into the data1 register of this DM
+
+`ifdef DEBUG_OUTPUT_DATA1_REG_WRITE
+                    // DEBUG - data1 update from mem_access triggered
+                    send_data = { 8'h4F };
+                    printf = ~printf;
+`endif
                 end
 
                 // write dm.dmcontrol (0x11)
@@ -376,9 +384,11 @@ begin
                     begin
                         data_o_reg = data1_reg; // present the read data
 
-                        //// DEBUG
-                        //send_data = { 8'h31 };
-                        //printf = ~printf;
+`ifdef DEBUG_OUTPUT_DATA1_REG_READ
+                        // DEBUG - data1 update from mem_access triggered
+                        send_data = { 8'h31 };
+                        printf = ~printf;
+`endif
                     end
 
                     // dm.control (0x10)

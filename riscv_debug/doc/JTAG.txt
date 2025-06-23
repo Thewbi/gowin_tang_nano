@@ -1399,7 +1399,7 @@ control bits are defined on page 15 in the section: 3.6.1.3 Access Memory.
 010bin 					- aamsize - 2dec = 32 bit data transfer
 0bin 					- aampostincrement - 0 = no postincrement
 00bin 					- not used
-0bin 					- write - 0 == write, 1 == read)
+0bin 					- write - (0 == write, 1 == read)
 00bin 					- target specific - (not used)
 0000 0000 0000 00bin 	- not used
 
